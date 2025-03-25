@@ -42,6 +42,22 @@ Once you have the executable, you can either:
 Delays in the Client/Server mode are larger than in host mode. It is suggested you test your algorithms out in both modes.
 Note that the **final competitions will be in Client/Server mode**, to enable you to share executables and run games against other teams without seeing their code.
 
+## Other command line options
+
+It is possible to manually change the port of an executable 
+
+```
+ ./PacManCTF -port <number> -mode host
+```
+
+Or the map to be loaded during startup
+
+```
+ ./PacManCTF -map <name> 
+```
+
+NB! Note that if the "-mode" parameter is not set, you have to manually specify it from the GUI at startup.
+
 # Building an executable
 
 ![alt text](build1.png)
