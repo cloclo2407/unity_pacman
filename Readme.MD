@@ -3,7 +3,7 @@
 Inspired by UC Berkeley's Python environment: http://ai.berkeley.edu/contest.html
 
 The PacMan environment is built using network Unity NetCode for GameObjects. 
-If you wish to ignore most of that, you can build your AI code into the [PacManAI](Assets/Scripts/PacMan/PacManAI.cs) class, as in the previous assignments.
+If you wish to ignore most of that, you can build your AI code into the [PacManAI](Assets/Scripts/PacManAI.cs) class, as in the previous assignments.
 However, part of this assignment is competing against other teams.
 For managing that, we have provided a networked version of the game as well.
 
