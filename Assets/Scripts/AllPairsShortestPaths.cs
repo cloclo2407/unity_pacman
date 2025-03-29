@@ -9,6 +9,9 @@ public class AllPairsShortestPaths
     static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances_neg; // distances between nodes with x<0
     static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_neg; // graph for x<0
     static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_pos; // graph for x>0
+    static Dictionary<Vector2Int, Dictionary<Vector2Int, Vector2Int?>> predecessor; // Contains predecessor in FloydWharshall to recompute paths
+    static List<(Vector2Int, Vector2Int)> transitionPairs; // Stores pairs (leftCell, rightCell) where crossing is possible
+
     private static bool _initialized = false; // true if the distances have already been computed (to avoid recomputation by all agents)
 
     ////// WARNING: everything is in cell coordinates 
@@ -23,6 +26,8 @@ public class AllPairsShortestPaths
         if (_initialized) return; // Prevent recomputation
 
         GenerateGraph(obstacleMap);
+        predecessor = new Dictionary<Vector2Int, Dictionary<Vector2Int, Vector2Int?>>();
+        FindTransitionPairs(obstacleMap);
         distances_pos = FloydWarshall(graph_pos);
         distances_neg = FloydWarshall(graph_neg);
         _initialized = true;
@@ -39,26 +44,30 @@ public class AllPairsShortestPaths
     /*
      * Calculates all pairs shortest paths in a graph
      * Returns the dictionary contains the distances
+     * Stores the predecessor of each node in predecessor for computing the path
      */
     public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> FloydWarshall(Dictionary<Vector2Int, List<(Vector2Int, float)>> graph)
     {
         var nodes = new List<Vector2Int>(graph.Keys);
-        int n = nodes.Count;
         var distance = new Dictionary<Vector2Int, Dictionary<Vector2Int, float>>();
         float INF = float.MaxValue;
 
-        // Initialize distance matrix
-        foreach (var node in nodes)
+        // Initialize distance and predecessor matrices
+        foreach (var u in nodes)
         {
-            distance[node] = new Dictionary<Vector2Int, float>();
-            foreach (var other in nodes)
+            distance[u] = new Dictionary<Vector2Int, float>();
+            predecessor[u] = new Dictionary<Vector2Int, Vector2Int?>();
+
+            foreach (var v in nodes)
             {
-                distance[node][other] = node == other ? 0 : INF;
+                distance[u][v] = (u == v) ? 0 : INF;
+                predecessor[u][v] = null;
             }
 
-            foreach (var (neighbor, weight) in graph[node])
+            foreach (var (v, weight) in graph[u])
             {
-                distance[node][neighbor] = weight;
+                distance[u][v] = weight;
+                predecessor[u][v] = u;
             }
         }
 
@@ -69,13 +78,16 @@ public class AllPairsShortestPaths
             {
                 foreach (var j in nodes)
                 {
-                    if (distance[i][k] < INF && distance[k][j] < INF)
+                    if (distance[i][k] < INF && distance[k][j] < INF &&
+                        distance[i][j] > distance[i][k] + distance[k][j])
                     {
-                        distance[i][j] = Mathf.Min(distance[i][j], distance[i][k] + distance[k][j]);
+                        distance[i][j] = distance[i][k] + distance[k][j];
+                        predecessor[i][j] = predecessor[k][j];
                     }
                 }
             }
         }
+
         return distance;
     }
 
@@ -133,6 +145,129 @@ public class AllPairsShortestPaths
                 }
             }
         }
+    }
+
+    /*
+    * Finds all pairs of adjacent cells (x=-1 and x=0) that allow crossing between x<0 and x>0
+    * Stores them in transitionPairs
+    */
+    private static void FindTransitionPairs(ObstacleMap obstacleMap)
+    {
+        transitionPairs = new List<(Vector2Int, Vector2Int)>();
+
+        // Check all cells near x=0 (both x=-1 and x=0)
+        foreach (var cell in obstacleMap.traversabilityPerCell)
+        {
+            Vector2Int pos = cell.Key;
+
+            // Only consider cells at x=-1 or x=0
+            if (pos.x == -1 || pos.x == 0)
+            {
+                // Check if the cell is traversable
+                if (cell.Value != ObstacleMap.Traversability.Blocked)
+                {
+                    // If current cell is x=-1, check if x=0 at the same y is free
+                    if (pos.x == -1)
+                    {
+                        Vector2Int rightCell = new Vector2Int(0, pos.y);
+                        if (obstacleMap.traversabilityPerCell.ContainsKey(rightCell) &&
+                            obstacleMap.traversabilityPerCell[rightCell] != ObstacleMap.Traversability.Blocked)
+                        {
+                            transitionPairs.Add((pos, rightCell));
+                        }
+                    }
+                    // If current cell is x=0, check if x=-1 at the same y is free
+                    else if (pos.x == 0)
+                    {
+                        Vector2Int leftCell = new Vector2Int(-1, pos.y);
+                        if (obstacleMap.traversabilityPerCell.ContainsKey(leftCell) &&
+                            obstacleMap.traversabilityPerCell[leftCell] != ObstacleMap.Traversability.Blocked)
+                        {
+                            transitionPairs.Add((pos, leftCell));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * Computes a path from start to goal
+     * Returns the path as a list of Vector2Int
+     * To go from one side of the map to the other, finds the pairs of cells to cross the border that minimizes the total distance
+     */
+    public static List<Vector2Int> ComputeShortestPath(Vector2Int start, Vector2Int goal)
+    {
+        bool startPos = start.x >= 0;
+        bool goalPos = goal.x >= 0;
+
+        // Case 1: Both in the same half -> Direct path
+        if (startPos == goalPos)
+        {
+            return ReconstructPath(start, goal);
+        }
+
+        // Case 2: Different halves -> Find best transition
+        var startDistances = startPos ? distances_pos : distances_neg;
+        var goalDistances = goalPos ? distances_pos : distances_neg;
+
+        float minTotalCost = float.MaxValue;
+        (Vector2Int entry, Vector2Int exit) bestTransition = transitionPairs[0];
+
+        // Find the best transition pair (lowest combined cost)
+        foreach (var (entry, exit) in transitionPairs)
+        {
+            // Ensure entry is in start's half, exit is in goal's half
+            bool entryInStartHalf = ((entry.x >= 0) == startPos);
+            bool exitInGoalHalf = ((exit.x >= 0) == goalPos);
+
+            if (!entryInStartHalf || !exitInGoalHalf)
+                continue; // Skip invalid transitions
+            float costToEntry = startDistances[start][entry];
+            float costFromExit = goalDistances[exit][goal];
+            float totalCost = costToEntry + 1 + costFromExit; // +1 for crossing
+
+            if (totalCost < minTotalCost)
+            {
+                minTotalCost = totalCost;
+                bestTransition = (entry, exit);
+            }
+        }
+
+        // Reconstruct the full path: start -> entry -> exit -> goal
+        List<Vector2Int> path = ReconstructPath(start, bestTransition.entry);
+        path.Add(bestTransition.exit); // Crossing point
+        path.AddRange(ReconstructPath(bestTransition.exit, goal));
+        return path;
+    }
+
+    /*
+     * Helper function to compute the shortest path between start and goal IFF start and goal are in the same half of the map
+     */
+    private static List<Vector2Int> ReconstructPath(Vector2Int start, Vector2Int goal)
+    {
+        var path = new List<Vector2Int>();
+        if (!predecessor.ContainsKey(start) || !predecessor[start].ContainsKey(goal))
+        {
+            Debug.Log("not in predecessor");
+            return path;
+        }
+
+        Vector2Int? current = goal;
+        while (current != null && current != start)
+        {
+            path.Add(current.Value);
+            current = predecessor[start][current.Value];
+        }
+
+        if (current == null)
+        {
+            return new List<Vector2Int>(); // No path exists
+        }
+
+        path.Add(start);
+        path.Reverse();
+        return path;
     }
 
 }

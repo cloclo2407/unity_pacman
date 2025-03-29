@@ -17,6 +17,12 @@ namespace PacMan
             _mapManager = mapManager;
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
+
+            // Example on how to draw the path between start and goal
+            Vector2Int start = new Vector2Int(-4, 5);
+            Vector2Int goal = new Vector2Int(3, 2   );
+            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
+            DrawPath(path);
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -79,6 +85,19 @@ namespace PacMan
             };
 
             return droneAction;
+        }
+
+        private void DrawPath(List<Vector2Int> path)
+        {
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector3 first = _obstacleMap.CellToWorld(new Vector3Int((int)path[i].x, 0, (int)path[i].y)) + _obstacleMap.trueScale / 2;
+                first.y = 0f;
+                Vector3 second = _obstacleMap.CellToWorld(new Vector3Int((int)path[i + 1].x, -0, (int)path[i + 1].y)) + _obstacleMap.trueScale / 2;
+                second.y = 0f;
+
+                Debug.DrawLine(first, second, Color.red, 100000f);
+            }
         }
     }
 
