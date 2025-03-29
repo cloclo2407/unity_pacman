@@ -15,7 +15,8 @@ namespace PacMan
         {
             _agentAgentManager = GetComponent<IPacManAgent>();
             _mapManager = mapManager;
-            _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one);
+            _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
+            AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -80,4 +81,5 @@ namespace PacMan
             return droneAction;
         }
     }
+
 }
