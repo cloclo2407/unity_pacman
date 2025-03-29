@@ -5,11 +5,14 @@ using UnityEngine;
 
 public class AllPairsShortestPaths
 {
-    static Dictionary<Vector2, Dictionary<Vector2, float>> distances_pos; // distances between nodes with x>0
-    static Dictionary<Vector2, Dictionary<Vector2, float>> distances_neg; // distances between nodes with x<0
-    static Dictionary<Vector2, List<(Vector2, float)>> graph_neg; // graph for x<0
-    static Dictionary<Vector2, List<(Vector2, float)>> graph_pos; // graph for x>0
+    static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances_pos; // distances between nodes with x>0
+    static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances_neg; // distances between nodes with x<0
+    static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_neg; // graph for x<0
+    static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_pos; // graph for x>0
     private static bool _initialized = false; // true if the distances have already been computed (to avoid recomputation by all agents)
+
+    ////// WARNING: everything is in cell coordinates 
+    ////// Go back to world coordinates with _obstacleMap.CellToWorld(new Vector3Int((int)node.x, 0, (int)node.y)) + _obstacleMap.trueScale / 2
 
     /*
      * Create graphs for the map and calculates shortests distances
@@ -28,7 +31,7 @@ public class AllPairsShortestPaths
     /*
      * Returns the dictionary containing all pairs shortests distances for x>0 is positiveX is true, for x<0 otherwise
      */
-    public static Dictionary<Vector2, Dictionary<Vector2, float>> GetDistances(bool positiveX)
+    public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> GetDistances(bool positiveX)
     {
         return positiveX ? distances_pos : distances_neg;
     }
@@ -37,17 +40,17 @@ public class AllPairsShortestPaths
      * Calculates all pairs shortest paths in a graph
      * Returns the dictionary contains the distances
      */
-    public static Dictionary<Vector2, Dictionary<Vector2, float>> FloydWarshall(Dictionary<Vector2, List<(Vector2, float)>> graph)
+    public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> FloydWarshall(Dictionary<Vector2Int, List<(Vector2Int, float)>> graph)
     {
-        var nodes = new List<Vector2>(graph.Keys);
+        var nodes = new List<Vector2Int>(graph.Keys);
         int n = nodes.Count;
-        var distance = new Dictionary<Vector2, Dictionary<Vector2, float>>();
+        var distance = new Dictionary<Vector2Int, Dictionary<Vector2Int, float>>();
         float INF = float.MaxValue;
 
         // Initialize distance matrix
         foreach (var node in nodes)
         {
-            distance[node] = new Dictionary<Vector2, float>();
+            distance[node] = new Dictionary<Vector2Int, float>();
             foreach (var other in nodes)
             {
                 distance[node][other] = node == other ? 0 : INF;
@@ -89,7 +92,7 @@ public class AllPairsShortestPaths
         graph_neg = new();
 
         // 1. Get all free cells
-        List<Vector2> freeCells = new();
+        List<Vector2Int> freeCells = new();
         foreach (var cell in obstacleMap.traversabilityPerCell)
         {
             if (cell.Value != ObstacleMap.Traversability.Blocked)
@@ -98,19 +101,19 @@ public class AllPairsShortestPaths
             }
         }
 
-        Vector2[] directions = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
-        Vector2[] diagonals = { new(1, 1), new(1, -1), new(-1, 1), new(-1, -1) };
+        Vector2Int[] directions = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
+        Vector2Int[] diagonals = { new(1, 1), new(1, -1), new(-1, 1), new(-1, -1) };
 
         // 2. Construct graph for each free cell
-        foreach (Vector2 current in freeCells)
+        foreach (Vector2Int current in freeCells)
         {
             var currentGraph = current.x >= 0 ? graph_pos : graph_neg;
-            currentGraph[current] = new List<(Vector2, float)>();
+            currentGraph[current] = new List<(Vector2Int, float)>();
 
             // Add direct neighbors
             foreach (var dir in directions)
             {
-                Vector2 neighbor = current + dir;
+                Vector2Int neighbor = current + dir;
                 if (freeCells.Contains(neighbor)) // Only connect to other free cells
                 {
                     currentGraph[current].Add((neighbor, 1f));
@@ -120,9 +123,9 @@ public class AllPairsShortestPaths
             // Add diagonal neighbors (only if both adjacent cells are free)
             foreach (var diag in diagonals)
             {
-                Vector2 neighbor = current + diag;
-                Vector2 adj1 = new Vector2(current.x, neighbor.y);
-                Vector2 adj2 = new Vector2(neighbor.x, current.y);
+                Vector2Int neighbor = current + diag;
+                Vector2Int adj1 = new Vector2Int(current.x, neighbor.y);
+                Vector2Int adj2 = new Vector2Int(neighbor.x, current.y);
 
                 if (freeCells.Contains(neighbor) && freeCells.Contains(adj1) && freeCells.Contains(adj2))
                 {
