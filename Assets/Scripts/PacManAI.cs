@@ -11,6 +11,8 @@ namespace PacMan
         private ObstacleMap _obstacleMap;
         private MapManager _mapManager;
 
+        private bool isBlue;
+
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
             _agentAgentManager = GetComponent<IPacManAgent>();
@@ -18,11 +20,13 @@ namespace PacMan
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
 
+            isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
             // Example on how to draw the path between start and goal
             Vector2Int start = new Vector2Int(-4, 5);
-            Vector2Int goal = new Vector2Int(3, 2   );
+            Vector2Int goal = new Vector2Int(3, 2);
             List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
             DrawPath(path);
+            Debug.Log(Defense.GetNumberOfPassages(isBlue));
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -97,6 +101,22 @@ namespace PacMan
                 second.y = 0f;
 
                 Debug.DrawLine(first, second, Color.red, 100000f);
+            }
+        }
+
+        private void OnDrawGizmos()
+        {
+
+        }
+
+        private void DrawDefense()
+        {
+            List<Vector2Int> defensePositions = Defense.GetDefensePositions(3, isBlue);
+            Gizmos.color = Color.red;
+            foreach (var pos in defensePositions)
+            {
+                Vector3 worldPos = _obstacleMap.CellToWorld(new Vector3Int((int)pos.x, 0, (int)pos.y)) + _obstacleMap.trueScale / 2;
+                Gizmos.DrawWireSphere(worldPos, 0.5f);
             }
         }
     }

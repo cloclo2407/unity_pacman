@@ -5,6 +5,7 @@ using UnityEngine;
 
 public class ImprovingPath
 {
+    static float epsilon = 0.1f;
     /*
      * Returns a path from start to goal as a list of real worls positions
      * Simplifies the path by removing points in straight lines
@@ -48,7 +49,7 @@ public class ImprovingPath
     /*
      * Helper function for simplifyPath
      */
-    private void simplifyRecursive(List<Vector3> path, int startIndex, int endIndex, float epsilon, List<Vector3> new_path)
+    private static void simplifyRecursive(List<Vector3> path, int startIndex, int endIndex, float epsilon, List<Vector3> new_path)
     {
         if (endIndex <= startIndex + 1) // can't simplify two points
             return;
@@ -81,7 +82,7 @@ public class ImprovingPath
     /*
      * Get the shortest distance from a point to the line defined by lineStart and lineEnd
      */
-    private float perpendicularDistance(Vector3 point, Vector3 lineStart, Vector3 lineEnd) 
+    private static float perpendicularDistance(Vector3 point, Vector3 lineStart, Vector3 lineEnd) 
     {
         Vector3 line = lineEnd - lineStart;
         Vector3 projection = Vector3.Project(point - lineStart, line);

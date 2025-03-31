@@ -10,7 +10,7 @@ public class AllPairsShortestPaths
     static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_neg; // graph for x<0
     static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_pos; // graph for x>0
     static Dictionary<Vector2Int, Dictionary<Vector2Int, Vector2Int?>> predecessor; // Contains predecessor in FloydWharshall to recompute paths
-    static List<(Vector2Int, Vector2Int)> transitionPairs; // Stores pairs (leftCell, rightCell) where crossing is possible
+    public static List<(Vector2Int, Vector2Int)> transitionPairs; // Stores pairs (leftCell, rightCell) where crossing is possible
 
     private static bool _initialized = false; // true if the distances have already been computed (to avoid recomputation by all agents)
 
