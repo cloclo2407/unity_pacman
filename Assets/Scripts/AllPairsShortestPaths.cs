@@ -30,6 +30,7 @@ public class AllPairsShortestPaths
         FindTransitionPairs(obstacleMap);
         distances_pos = FloydWarshall(graph_pos);
         distances_neg = FloydWarshall(graph_neg);
+
         _initialized = true;
     }
     
@@ -249,7 +250,9 @@ public class AllPairsShortestPaths
         var path = new List<Vector2Int>();
         if (!predecessor.ContainsKey(start) || !predecessor[start].ContainsKey(goal))
         {
-            Debug.Log("not in predecessor");
+            if (!predecessor.ContainsKey(start))
+                Debug.Log("not in predecessor: " + start);
+            else Debug.Log("not in predecessor goal");
             return path;
         }
 

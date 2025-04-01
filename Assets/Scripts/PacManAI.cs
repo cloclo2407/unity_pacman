@@ -12,6 +12,12 @@ namespace PacMan
         private MapManager _mapManager;
 
         private bool isBlue;
+        private bool isDefense = true;
+        private Vector2Int myDefensePosition;
+        private List<Vector2Int> defensePositions;
+
+        int pacManIndex = 0;
+
 
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
@@ -21,12 +27,7 @@ namespace PacMan
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
 
             isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
-            // Example on how to draw the path between start and goal
-            Vector2Int start = new Vector2Int(-4, 5);
-            Vector2Int goal = new Vector2Int(3, 2);
-            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
-            DrawPath(path);
-            Debug.Log(Defense.GetNumberOfPassages(isBlue));
+            
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -52,6 +53,19 @@ namespace PacMan
             if (fetchEnemyObservations.Observations.Length > 0)
             {
                 // Debug.Log(fetchEnemyObservations.ObservationFixedTime);
+            }
+
+
+            AssignDefense();
+            if (isDefense)
+            {
+                // Example on how to draw the path between start and goal
+                Vector3 start3D = _obstacleMap.WorldToCell(_agentAgentManager.GetStartPosition());
+                Vector2Int start = new Vector2Int((int)start3D.x, (int)start3D.z);
+                Vector2Int goal = myDefensePosition;
+
+                List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
+                DrawPath(path);
             }
 
             // Since the RigidBody is updated server side and the client only syncs position, rigidbody.Velocity does not report a velocity
@@ -106,19 +120,76 @@ namespace PacMan
 
         private void OnDrawGizmos()
         {
-
+            DrawDefense();
+            DrawPacMan();
+            Gizmos.color = Color.green;
+            Vector3 cell = _obstacleMap.CellToWorld(new Vector3Int(0, 0, 0)) + _obstacleMap.trueScale / 2;
+            Gizmos.DrawWireSphere(cell, 0.5f);
+            
         }
 
         private void DrawDefense()
         {
-            List<Vector2Int> defensePositions = Defense.GetDefensePositions(3, isBlue);
             Gizmos.color = Color.red;
+            if (isBlue)
+            {
+                Gizmos.color = Color.blue;
+            }
             foreach (var pos in defensePositions)
             {
                 Vector3 worldPos = _obstacleMap.CellToWorld(new Vector3Int((int)pos.x, 0, (int)pos.y)) + _obstacleMap.trueScale / 2;
                 Gizmos.DrawWireSphere(worldPos, 0.5f);
             }
         }
+
+        private void DrawPacMan()
+        {
+            
+            Gizmos.color = Color.green;
+            var friendlyAgents = _agentAgentManager.GetFriendlyAgents();
+            foreach (var friend in friendlyAgents)
+            {
+                Vector3 pos = transform.position;
+                Vector3 worldPos = _obstacleMap.CellToWorld(new Vector3Int((int)pos.x, 0, (int)pos.y)) + _obstacleMap.trueScale / 2;
+                Gizmos.DrawWireSphere(pos, 0.5f);
+            }
+        }
+
+        private void AssignDefense()
+        {
+            var friendlyAgents = _agentAgentManager.GetFriendlyAgents();
+            int agentCount = friendlyAgents.Count;
+
+            if (agentCount == 0)
+                return;
+
+            int attackers; //nb of pacman who attack
+            if (agentCount <= 3) attackers = 1;
+            else attackers = 2;
+            
+            // Get defense positions
+            defensePositions = Defense.GetDefensePositions(agentCount - attackers, isBlue);
+
+            // Sort agents based on their respawn X position (closer to 0 attacks)
+            friendlyAgents.Sort((a, b) => Mathf.Abs(a.GetStartPosition().x).CompareTo(Mathf.Abs(b.GetStartPosition().x)));
+
+            for (int i = 0; i < agentCount; i++)
+            {
+                if (friendlyAgents[i] == _agentAgentManager)
+                {
+                    pacManIndex = i;
+                    if (i < agentCount - attackers)
+                    {
+                        myDefensePosition = defensePositions[i];
+                    }
+                    else
+                    {
+                        isDefense = false;
+                    }                    
+                }               
+            }
+        }
+
     }
 
 }

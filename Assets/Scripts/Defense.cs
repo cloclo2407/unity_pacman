@@ -10,13 +10,13 @@ public class Defense
     /*
      * Groups transition pairs into adjacent passages and sorts them by size.
      */
-    private static void ComputePassageGroups(bool isBlue)
+    private static void ComputePassageGroups()
     {
         passageGroups = new();
 
         // Filter transition pairs based on the team side
         List<(Vector2Int, Vector2Int)> filteredPairs = AllPairsShortestPaths.transitionPairs
-            .FindAll(pair => (isBlue && pair.Item1.x < 0) || (!isBlue && pair.Item1.x >= 0));
+            .FindAll(pair => pair.Item1.x >= 0);
 
         // Sort by y-coordinate
         filteredPairs.Sort((a, b) => a.Item1.y.CompareTo(b.Item1.y));
@@ -58,7 +58,7 @@ public class Defense
         List<Vector2Int> selectedPositions = new();
 
         // Ensure passageGroups are computed
-        ComputePassageGroups(isBlue);
+        ComputePassageGroups();
 
         // Flatten passage groups into a single sorted list of unique positions
         List<Vector2Int> allPositions = new();
@@ -66,7 +66,7 @@ public class Defense
         {
             foreach (var pair in group)
             {
-                Vector2Int position = isBlue ? pair.Item1 : pair.Item2;
+                Vector2Int position = isBlue ? pair.Item2 : pair.Item1;
                 if (!allPositions.Contains(position))
                     allPositions.Add(position);
             }
@@ -93,7 +93,7 @@ public class Defense
 
     public static int GetNumberOfPassages(bool isBlue)
     {
-        ComputePassageGroups(isBlue);
+        ComputePassageGroups();
         return passageGroups.Count;
     }
 }
