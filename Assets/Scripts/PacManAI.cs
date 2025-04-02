@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using PacMan.PacMan;
 using Scripts.Map;
+using UnityEditor.TextCore.Text;
 using UnityEngine;
 
 namespace PacMan
@@ -11,22 +12,46 @@ namespace PacMan
         private ObstacleMap _obstacleMap;
         private MapManager _mapManager;
 
+        private List<Vector3> allAgentPositions;
+        
         private bool isBlue;
+
+        private int nrOfFriendlyAgents;
+
+        private bool printed = false;
+        private VeronoiMap _veronoiMap;
 
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
             _agentAgentManager = GetComponent<IPacManAgent>();
             _mapManager = mapManager;
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
+            
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
 
             isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
             // Example on how to draw the path between start and goal
+            /*
             Vector2Int start = new Vector2Int(-4, 5);
             Vector2Int goal = new Vector2Int(3, 2);
             List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
             DrawPath(path);
             Debug.Log(Defense.GetNumberOfPassages(isBlue));
+            */
+
+            nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
+            
+            var startPositions = mapManager.startPositions;
+            allAgentPositions = new List<Vector3>(2 * nrOfFriendlyAgents);
+            for (int i = 0; i < 2 * nrOfFriendlyAgents; i++)
+            {
+                allAgentPositions.Add(startPositions[i]);
+            }
+
+            _veronoiMap = new VeronoiMap();
+            _veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);
+            
+            
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -44,15 +69,56 @@ namespace PacMan
 
             var isLocalPointTraversable = _obstacleMap?.GetLocalPointTraversibility(transform.localPosition);
 
-            var friendlyAgentManager = _agentAgentManager.GetFriendlyAgents()[0];
-            friendlyAgentManager.IsGhost();
+            //var friendlyAgentManager = _agentAgentManager.GetFriendlyAgents()[0];
+            //friendlyAgentManager.IsGhost();
+
+            
+            
+            
+            var agentIndex = 0;
+            
+            foreach (var _friendlyAgentManager in _agentAgentManager.GetFriendlyAgents())
+            {
+                allAgentPositions[agentIndex] = _friendlyAgentManager.gameObject.transform.position;
+                agentIndex++;
+            }
 
             var visibleEnemyAgents = _agentAgentManager.GetVisibleEnemyAgents();
             PacManObservations fetchEnemyObservations = _agentAgentManager.GetEnemyObservations();
+            
             if (fetchEnemyObservations.Observations.Length > 0)
             {
-                // Debug.Log(fetchEnemyObservations.ObservationFixedTime);
+                foreach (var observation in fetchEnemyObservations.Observations)
+                {
+                    //Debug.Log($"agentindex {agentIndex}, the observed position is {observation.Position}, with sqrMagnitude {observation.Position.sqrMagnitude}");
+                    if (observation.Position.sqrMagnitude > 0.01f) //If the observed position is not Vector3.zero (no sound -> keep old posiiton)
+                    {
+                        //Debug.Log("Passed magnitude > 0.01f!");
+                        allAgentPositions[agentIndex] = observation.Position;
+                    }
+                     agentIndex++;
+                }
             }
+            
+            /*
+            if (!printed)
+            {
+                Debug.Log("_-------------------------------");
+                Debug.Log($"Length is {allAgentPositions.Count}, allAgentPosisions = {allAgentPositions}");
+                var i = 0;
+                foreach (var agentPosition in allAgentPositions)
+                {
+                    
+                    Debug.Log("Position = " + agentPosition + "for agent nr" + i);
+                    i++;
+                }
+                Debug.Log("-------------------------------_");
+
+                //printed = true;
+            }
+            */
+            
+            
 
             // Since the RigidBody is updated server side and the client only syncs position, rigidbody.Velocity does not report a velocity
             _agentAgentManager.GetVelocity(); // Use the manager method to get the true velocity from the server
@@ -61,6 +127,11 @@ namespace PacMan
             // // replace the human input below with some AI stuff
             var x = 0;
             var z = 0;
+
+            x = 1;
+            z = 1;
+            
+            /*
 
             if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("w") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("up"))
             {
@@ -81,13 +152,15 @@ namespace PacMan
             {
                 x = 1;
             }
+            */
 
+            
             var droneAction = new PacManAction
             {
                 AccelerationDirection = new Vector2(x, z), // Controller converts to [0; 1] normalized acceleration vector,
                 AccelerationMagnitude = 1f // 1 means max acceleration in chosen direction // 0.3 guarantees not observed
             };
-
+            
             return droneAction;
         }
 
@@ -104,9 +177,48 @@ namespace PacMan
             }
         }
 
+        private void DrawVeronoiMap()
+        {
+            _veronoiMap = new VeronoiMap();
+            _veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);
+            
+            List<Color> playerColor = GetPlayerColors();
+            
+            foreach (var cellPosition in _veronoiMap.closestAgent.Keys)
+            {
+                var worldPos = _obstacleMap.CellToWorld(new Vector3Int(cellPosition.x, 0, cellPosition.y));
+                
+                worldPos.y = 0;
+                worldPos += Vector3.up * 0.25f;
+
+                var scale = Vector3.Scale(transform.localScale, _obstacleMap.trueScale);
+                var gizmoSize = new Vector3(scale.x * 0.95f, 0.005f, scale.z * 0.95f);
+                
+                Gizmos.color = playerColor[_veronoiMap.closestAgent[cellPosition]];
+
+                Gizmos.DrawCube(worldPos, gizmoSize);
+                
+            }
+        }
+        
+        public List<Color> GetPlayerColors()
+        {
+            List<Color> playerColors = new List<Color>(2* nrOfFriendlyAgents);
+            for (int i = 1; i <= 2*nrOfFriendlyAgents; i++)
+            {
+                // Normalize hue around the color wheel - Chat GPT
+                float hue = (float) i / (2*nrOfFriendlyAgents); // Hue varies between 0 and 1
+                float saturation = 1.0f; // Keep colors vivid
+                float value = 1.0f; // Full brightness
+                
+                playerColors.Add(Color.HSVToRGB(hue, saturation, value));
+            }
+            return playerColors;
+        }
+        
         private void OnDrawGizmos()
         {
-
+            DrawVeronoiMap();
         }
 
         private void DrawDefense()
