@@ -5,10 +5,8 @@ using UnityEngine;
 
 public class AllPairsShortestPaths
 {
-    static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances_pos; // distances between nodes with x>0
-    static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances_neg; // distances between nodes with x<0
-    static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_neg; // graph for x<0
-    static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph_pos; // graph for x>0
+    static public Dictionary<Vector2Int, Dictionary<Vector2Int, float>> distances; // distances between all nodes
+    static Dictionary<Vector2Int, List<(Vector2Int, float)>> graph; // graph 
     static Dictionary<Vector2Int, Dictionary<Vector2Int, Vector2Int?>> predecessor; // Contains predecessor in FloydWharshall to recompute paths
     public static List<(Vector2Int, Vector2Int)> transitionPairs; // Stores pairs (leftCell, rightCell) where crossing is possible
 
@@ -28,8 +26,7 @@ public class AllPairsShortestPaths
         GenerateGraph(obstacleMap);
         predecessor = new Dictionary<Vector2Int, Dictionary<Vector2Int, Vector2Int?>>();
         FindTransitionPairs(obstacleMap);
-        distances_pos = FloydWarshall(graph_pos);
-        distances_neg = FloydWarshall(graph_neg);
+        distances= FloydWarshall(graph);
 
         _initialized = true;
     }
@@ -37,9 +34,9 @@ public class AllPairsShortestPaths
     /*
      * Returns the dictionary containing all pairs shortests distances for x>0 is positiveX is true, for x<0 otherwise
      */
-    public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> GetDistances(bool positiveX)
+    public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> GetDistances()
     {
-        return positiveX ? distances_pos : distances_neg;
+        return distances;
     }
 
     /*
@@ -101,8 +98,8 @@ public class AllPairsShortestPaths
      */
     public static void GenerateGraph(ObstacleMap obstacleMap)
     {
-        graph_pos = new();
-        graph_neg = new();
+        graph = new();
+        var currentGraph = graph;
 
         // 1. Get all free cells
         List<Vector2Int> freeCells = new();
@@ -120,7 +117,6 @@ public class AllPairsShortestPaths
         // 2. Construct graph for each free cell
         foreach (Vector2Int current in freeCells)
         {
-            var currentGraph = current.x >= 0 ? graph_pos : graph_neg;
             currentGraph[current] = new List<(Vector2Int, float)>();
 
             // Add direct neighbors
@@ -199,46 +195,27 @@ public class AllPairsShortestPaths
      */
     public static List<Vector2Int> ComputeShortestPath(Vector2Int start, Vector2Int goal)
     {
-        bool startPos = start.x >= 0;
-        bool goalPos = goal.x >= 0;
-
-        // Case 1: Both in the same half -> Direct path
-        if (startPos == goalPos)
+        var path = new List<Vector2Int>();
+        if (!predecessor.ContainsKey(start) || !predecessor[start].ContainsKey(goal))
         {
-            return ReconstructPath(start, goal);
+            Debug.Log("not in predecessor");
+            return path;
         }
 
-        // Case 2: Different halves -> Find best transition
-        var startDistances = startPos ? distances_pos : distances_neg;
-        var goalDistances = goalPos ? distances_pos : distances_neg;
-
-        float minTotalCost = float.MaxValue;
-        (Vector2Int entry, Vector2Int exit) bestTransition = transitionPairs[0];
-
-        // Find the best transition pair (lowest combined cost)
-        foreach (var (entry, exit) in transitionPairs)
+        Vector2Int? current = goal;
+        while (current != null && current != start)
         {
-            // Ensure entry is in start's half, exit is in goal's half
-            bool entryInStartHalf = ((entry.x >= 0) == startPos);
-            bool exitInGoalHalf = ((exit.x >= 0) == goalPos);
-
-            if (!entryInStartHalf || !exitInGoalHalf)
-                continue; // Skip invalid transitions
-            float costToEntry = startDistances[start][entry];
-            float costFromExit = goalDistances[exit][goal];
-            float totalCost = costToEntry + 1 + costFromExit; // +1 for crossing
-
-            if (totalCost < minTotalCost)
-            {
-                minTotalCost = totalCost;
-                bestTransition = (entry, exit);
-            }
+            path.Add(current.Value);
+            current = predecessor[start][current.Value];
         }
 
-        // Reconstruct the full path: start -> entry -> exit -> goal
-        List<Vector2Int> path = ReconstructPath(start, bestTransition.entry);
-        path.Add(bestTransition.exit); // Crossing point
-        path.AddRange(ReconstructPath(bestTransition.exit, goal));
+        if (current == null)
+        {
+            return new List<Vector2Int>(); // No path exists
+        }
+
+        path.Add(start);
+        path.Reverse();
         return path;
     }
 
@@ -250,9 +227,7 @@ public class AllPairsShortestPaths
         var path = new List<Vector2Int>();
         if (!predecessor.ContainsKey(start) || !predecessor[start].ContainsKey(goal))
         {
-            if (!predecessor.ContainsKey(start))
-                Debug.Log("not in predecessor: " + start);
-            else Debug.Log("not in predecessor goal");
+            Debug.Log("not in predecessor");
             return path;
         }
 

@@ -38,13 +38,13 @@ namespace PacMan
             isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
 
             // Example on how to draw the path between start and goal
-            /*
+            
             Vector2Int start = new Vector2Int(-4, 5);
             Vector2Int goal = new Vector2Int(3, 2);
             List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
             DrawPath(path);
             Debug.Log(Defense.GetNumberOfPassages(isBlue));
-            */
+            
 
             nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
             
@@ -206,7 +206,7 @@ namespace PacMan
             
             foreach (var cellPosition in _veronoiMap.closestAgent.Keys)
             {
-                var worldPos = _obstacleMap.CellToWorld(new Vector3Int(cellPosition.x, 0, cellPosition.y));
+                var worldPos = _obstacleMap.CellToWorld(new Vector3Int(cellPosition.x, 0, cellPosition.y)) + _obstacleMap.trueScale / 2;
                 
                 worldPos.y = 0;
                 worldPos += Vector3.up * 0.25f;

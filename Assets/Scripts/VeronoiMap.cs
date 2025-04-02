@@ -48,7 +48,7 @@ public class VeronoiMap
                         var worldToCell = obstacleMap.WorldToCell(agentPos);
                         var agentCellPos = new Vector2Int(worldToCell.x, worldToCell.z);
                     
-                        var dist = AllPairsShortestPaths.ComputeShortestPath(agentCellPos, cell.Key).Count;
+                        var dist = AllPairsShortestPaths.distances[agentCellPos][cell.Key];
                         //var dist = Vector2Int.Distance(agentCellPos, cell.Key);
                         if (dist < closestAgentDistance)
                         {
