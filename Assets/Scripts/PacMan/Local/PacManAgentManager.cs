@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using PacMan.PacMan;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -29,6 +30,7 @@ namespace PacMan.Local
         private PacManObservations _latestKnownObservation;
         private bool _ready;
         public PacManAction action;
+        private Thread planningThread;
 
         public void Initialize(PacManGameManager pacManGameManager)
         {
@@ -42,8 +44,15 @@ namespace PacMan.Local
 
             pacManAI.Initialize(_pacManGameManager.mapManager);
             _ready = true;
+
+            planningThread = new Thread(pacManAI.Plan);
+            planningThread.Start();
         }
 
+        public void OnDestroy()
+        {
+            if(planningThread != null && planningThread.IsAlive) planningThread.Abort();
+        }
         public void FixedUpdate()
         {
             if (!_ready) return;
@@ -56,8 +65,11 @@ namespace PacMan.Local
             }
 
             UpdateAgentState();
-            action = pacManAI.Tick();
-            _movement.ApplyDesiredControl(action.AccelerationDirection, action.AccelerationMagnitude);
+            if (_pacManGameManager.matchTime >= _pacManGameManager.planningLength)
+            {
+                action = pacManAI.Tick();
+                _movement.ApplyDesiredControl(action.AccelerationDirection, action.AccelerationMagnitude);
+            }
 
             ghostObject.SetActive(isGhost);
             pacManObject.SetActive(!isGhost);
