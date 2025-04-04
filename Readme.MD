@@ -61,6 +61,12 @@ Valid map names can be found in the map manager, as in previous assignments. A v
  ./PacManCTF -map pacmanA
 ``` 
 
+The configured planning time can be changed by "-plan <integerValue in seconds>"
+
+```
+ ./PacManCTF -plan 0
+``` 
+
 # Building an executable
 
 ![alt text](build1.png)

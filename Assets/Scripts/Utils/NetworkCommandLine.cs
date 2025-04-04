@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PacMan;
 using Scripts.Map;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
@@ -47,6 +48,11 @@ public class NetworkCommandLine : MonoBehaviour
             {
                 manager.LoadMap(map);
             });
+        }
+
+        if (args.TryGetValue("-plan", out string planTime))
+        {
+            FindObjectsByType<PacManGameManagerNetwork>(FindObjectsSortMode.None).ToList().ForEach(manager => manager.planningLength = Int32.Parse(planTime));
         }
     }
 
