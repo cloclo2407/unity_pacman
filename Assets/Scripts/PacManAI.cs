@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using PacMan.PacMan;
 using Scripts.Map;
 using UnityEditor.TextCore.Text;
@@ -21,11 +22,16 @@ namespace PacMan
 
         int pacManIndex = 0;
 
+        private float k_p = 2;
+        private float k_d = 2;
 
         private int nrOfFriendlyAgents;
 
-        private bool printed = false;
+
         private VeronoiMap _veronoiMap;
+
+        private List<Vector3> waypoints;
+        private int currentWaypointIndex = -1;
 
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
@@ -54,8 +60,8 @@ namespace PacMan
                 allAgentPositions.Add(startPositions[i]);
             }
 
-            _veronoiMap = new VeronoiMap();
-            _veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);
+            //_veronoiMap = new VeronoiMap();
+            //_veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);
             
             
         }
@@ -106,23 +112,7 @@ namespace PacMan
                 }
             }
             
-            /*
-            if (!printed)
-            {
-                Debug.Log("_-------------------------------");
-                Debug.Log($"Length is {allAgentPositions.Count}, allAgentPosisions = {allAgentPositions}");
-                var i = 0;
-                foreach (var agentPosition in allAgentPositions)
-                {
-                    
-                    Debug.Log("Position = " + agentPosition + "for agent nr" + i);
-                    i++;
-                }
-                Debug.Log("-------------------------------_");
-
-                //printed = true;
-            }
-            */
+            
             
             
 
@@ -130,6 +120,7 @@ namespace PacMan
             AssignDefense();
             if (isDefense)
             {
+                /*
                 // Example on how to draw the path between start and goal
                 Vector3 start3D = _obstacleMap.WorldToCell(_agentAgentManager.GetStartPosition());
                 Vector2Int start = new Vector2Int((int)start3D.x, (int)start3D.z);
@@ -137,6 +128,61 @@ namespace PacMan
 
                 List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
                 DrawPath(path);
+                */
+                
+
+                if (currentWaypointIndex == -1)
+                {
+                    Vector3 position3D = _obstacleMap.WorldToCell(gameObject.transform.position);
+                    Vector2Int position = new Vector2Int((int)position3D.x, (int)position3D.z);
+                    Vector2Int target = myDefensePosition;
+                    List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(position, target);
+                    GenerateWaypoints(path);
+                    currentWaypointIndex = 0;
+                }
+                
+                
+                
+                
+            }
+            //Attacking
+            else
+            {
+
+                if (currentWaypointIndex == -1)
+                {
+                    Vector3 position3D = _obstacleMap.WorldToCell(gameObject.transform.position);
+                    Vector2Int position = new Vector2Int((int)position3D.x, (int)position3D.z);
+
+                    var (closestFood, closestFoodCluster) = CentralGameTracker.FindClosestFoodCluster(gameObject.transform.position, isBlue);
+                    
+                    Vector2Int target =  new Vector2Int((int)closestFood.x, (int)closestFood.z);
+                    List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(position, target);
+                    GenerateWaypointsCluster(path, closestFoodCluster);
+                    currentWaypointIndex = 0;
+                }
+
+                //If we are are the final waypoint
+                if (currentWaypointIndex == waypoints.Count - 1)
+                {
+                    //TODO
+                    //waypoints = new List<Vector3>();
+                    //waypoints.Add(new Vector3(0,0,0));
+
+                    waypoints.Reverse();
+                    currentWaypointIndex = 0;
+                
+                }
+            }
+
+            var tol = 0.5f;
+            if ((gameObject.transform.position - waypoints[currentWaypointIndex]).magnitude < tol)
+            {
+                if (currentWaypointIndex < waypoints.Count - 1)
+                {
+                    currentWaypointIndex += 1;
+                    
+                }
             }
 
             CentralGameTracker.checkFood();
@@ -146,13 +192,13 @@ namespace PacMan
             // friendlyAgentManager.GetVelocity(); // Given the damping, max velocity magnitude is around 2.34
 
             // // replace the human input below with some AI stuff
+            
+            /*
             var x = 0;
             var z = 0;
 
             x = 1;
             z = 1;
-            
-            /*
 
             if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("w") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("up"))
             {
@@ -176,15 +222,38 @@ namespace PacMan
             */
 
             
-            var droneAction = new PacManAction
-            {
-                AccelerationDirection = new Vector2(x, z), // Controller converts to [0; 1] normalized acceleration vector,
-                AccelerationMagnitude = 1f // 1 means max acceleration in chosen direction // 0.3 guarantees not observed
-            };
             
-            return droneAction;
+            
+            
+            return PDControll();
         }
 
+        private PacManAction PDControll(float magnitude = 1f)
+        {
+            Vector3 currentPos = gameObject.transform.position;
+            Vector3 targetPos = waypoints[currentWaypointIndex];
+            
+            Vector3 posError = targetPos - currentPos;
+            
+            
+            Vector3 currentVelocity = _agentAgentManager.GetVelocity();
+            Vector3 targetVelocity = posError / Time.fixedDeltaTime;
+
+            Vector3 velocityError = targetVelocity - currentVelocity;
+
+            Vector3 desiredAcc = k_p * posError + k_d * velocityError;
+            
+            
+
+            var droneAction = new PacManAction
+            {
+                AccelerationDirection = new Vector2(desiredAcc.x, desiredAcc.z), // Controller converts to [0; 1] normalized acceleration vector,
+                AccelerationMagnitude = magnitude // 1 means max acceleration in chosen direction // 0.3 guarantees not observed
+            };
+
+            return droneAction;
+        }
+        
         private void DrawPath(List<Vector2Int> path)
         {
             for (int i = 0; i < path.Count - 1; i++)
@@ -242,10 +311,14 @@ namespace PacMan
             //DrawVeronoiMap();
             //DrawDefense();
             //DrawPacMan();
-            DrawFood();
-            Gizmos.color = Color.green;
-            Vector3 cell = _obstacleMap.CellToWorld(new Vector3Int(0, 0, 0)) + _obstacleMap.trueScale / 2;
-            Gizmos.DrawWireSphere(cell, 0.5f);    
+            //DrawFood();
+            //Gizmos.color = Color.green;
+            //Vector3 cell = _obstacleMap.CellToWorld(new Vector3Int(0, 0, 0)) + _obstacleMap.trueScale / 2;
+            //Gizmos.DrawWireSphere(cell, 0.5f);   
+            DrawCurrentWaypoint();
+            
+            DrawWaypoints();
+            
         }
 
         private void DrawDefense()
@@ -259,6 +332,33 @@ namespace PacMan
             {
                 Vector3 worldPos = _obstacleMap.CellToWorld(new Vector3Int((int)pos.x, 0, (int)pos.y)) + _obstacleMap.trueScale / 2;
                 Gizmos.DrawWireSphere(worldPos, 0.5f);
+            }
+        }
+
+        private void DrawCurrentWaypoint()
+        {
+            Gizmos.color = Color.red;
+            if (isBlue)
+            {
+                Gizmos.color = Color.blue;
+            }
+            
+            Gizmos.DrawSphere(waypoints[currentWaypointIndex], 0.3f);
+            
+        }
+        
+        private void DrawWaypoints()
+        {
+            Gizmos.color = Color.red;
+            if (isBlue)
+            {
+                Gizmos.color = Color.blue;
+            }
+            
+            foreach (var pos in waypoints)
+            {
+                
+                Gizmos.DrawSphere(pos, 0.1f);
             }
         }
 
@@ -331,6 +431,48 @@ namespace PacMan
             }
         }
 
+
+        private void GenerateWaypoints(List<Vector2Int> path)
+        {
+            waypoints = new List<Vector3>(path.Count);
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector3 waypoint = _obstacleMap.CellToWorld(new Vector3Int((int)path[i].x, 0, (int)path[i].y)) + _obstacleMap.trueScale / 2;
+                waypoint.y = 0f;
+
+                waypoints.Add(waypoint);
+            }
+        }
+        
+        private void GenerateWaypointsCluster(List<Vector2Int> path, List<Vector3Int> cluster)
+        {
+            //Assumes the path ends at a food inside the cluster
+            waypoints = new List<Vector3>(path.Count);
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector3 waypoint = _obstacleMap.CellToWorld(new Vector3Int((int)path[i].x, 0, (int)path[i].y)) + _obstacleMap.trueScale / 2;
+                waypoint.y = 0f;
+
+                waypoints.Add(waypoint);
+            }
+
+            var worldCluster = new List<Vector3>();
+            foreach (var cell in cluster)
+            {
+                worldCluster.Add(_obstacleMap.CellToWorld(cell));
+            }
+            
+            worldCluster.Sort((a, b) => Vector3.Distance(a, waypoints[^1]).CompareTo(Vector3.Distance(b, waypoints[^1])));
+
+            foreach (var point in worldCluster)
+            {
+                waypoints.Add(point + _obstacleMap.trueScale / 2);
+            }
+        }
+        
+        
+        
+        
     }
 
 }

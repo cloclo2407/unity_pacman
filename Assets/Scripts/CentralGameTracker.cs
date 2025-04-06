@@ -39,12 +39,12 @@ public static class CentralGameTracker
     
     public static void updatePositions(List<IPacManAgent> friendlyAgents, PacManObservations enemyObservations)
     {
-        var newPositons = new List<Vector3>(_nrAgents);
+        var newPositions = new List<Vector3>(_nrAgents);
         
         
         for (int i = 0; i < _nrFriendlyAgents; i++)
         {
-            agentPositions[i] = friendlyAgents[i].gameObject.transform.position;
+            newPositions[i] = friendlyAgents[i].gameObject.transform.position;
         }
         
         for (int i = 0; i < _nrFriendlyAgents; i++)
@@ -53,24 +53,24 @@ public static class CentralGameTracker
             
             if (observation.Visible)
             {
-                agentPositions[i + _nrFriendlyAgents] = observation.Position;
+                newPositions[i + _nrFriendlyAgents] = observation.Position;
             }
             else
             {
-                agentPositions[i + _nrFriendlyAgents] = Vector3.zero;
+                newPositions[i + _nrFriendlyAgents] = Vector3.zero;
             }
             
         }
         
         for (int i = _nrFriendlyAgents; i < _nrAgents; i++)
         {
-            if (newPositons[i] == Vector3.zero)
+            if (newPositions[i] == Vector3.zero)
             {
                 
             }
             
         }
-        agentPositions = newPositons;
+        agentPositions = newPositions;
                       
     }
 
@@ -172,5 +172,56 @@ public static class CentralGameTracker
         float maxXB = b.Max(pos=>Mathf.Abs(pos.x));
         return maxXB.CompareTo(maxXA);
     }
+
+    
+
+
+    public static (Vector3Int, List<Vector3Int>) FindClosestFoodCluster(Vector3 startPos, bool isBlue)
+    {            
+        List<Vector3Int> closestCluster = new List<Vector3Int>();
+        Vector3Int closestFood = new Vector3Int();
+
+        if (isBlue)
+        {
+            var closestDistance = float.MaxValue;
+            foreach (var cluster in positiveClusters)
+            {
+                foreach (var pos in cluster)
+                {
+                    if ((pos - startPos).magnitude < closestDistance)
+                    {
+                        closestCluster = cluster;
+                        closestFood = pos;
+                        closestDistance = (pos - startPos).magnitude;
+                    }
+                    
+                }
+            
+            }
+
+        }
+        else
+        {
+            var closestDistance = float.MaxValue;
+            foreach (var cluster in negativeClusters)
+            {
+                foreach (var pos in cluster)
+                {   
+                    if ((pos - startPos).magnitude < closestDistance)
+                    {
+                        closestCluster = cluster;
+                        closestFood = pos;
+                        closestDistance = (pos - startPos).magnitude;
+                    }
+                }
+            }
+        }
+
+        return (closestFood, closestCluster);
+    }
+    
+    
+    
+    
 
 }
