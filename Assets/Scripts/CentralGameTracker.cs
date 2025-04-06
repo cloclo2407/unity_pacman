@@ -4,30 +4,40 @@ using PacMan.PacMan;
 using Scripts.Map;
 using UnityEditor.UI;
 using UnityEngine;
+using System.Linq;
 
-public class CentralGameTracker
+public static class CentralGameTracker
 {
     
-    private bool _initialized = false;
+    private static bool _initialized = false;
     
-    private int _nrAgents;
-    private int _nrFriendlyAgents;
+    private static int _nrAgents;
+    private static int _nrFriendlyAgents;
+    private static IPacManAgent agentAgentManager;
+    private static ObstacleMap obstacleMap;
 
-    public List<Vector3> agentPositions;
+    public static List<Vector3> agentPositions;
+
+    private static List<GameObject> foodPositions;
+    public static List<List<Vector3Int>> positiveClusters;
+    public static List<List<Vector3Int>> negativeClusters;
 
 
-    public void initialize(int nrFriendlyAgents, List<Vector3> spawnPositions)
+    public static void Initialize(IPacManAgent _agentAgentManager, ObstacleMap _obstacleMap)
     {
         if (_initialized) return;
-        this._nrFriendlyAgents = nrFriendlyAgents;
-        this._nrAgents = 2 * nrFriendlyAgents;
-        this.agentPositions = spawnPositions;
+        _nrFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
+        _nrAgents = 2 * _nrFriendlyAgents;
+        agentAgentManager = _agentAgentManager;
+        obstacleMap = _obstacleMap;
+        foodPositions = new List<GameObject>();
+        checkFood();
 
         _initialized = true;
     }
 
     
-    public void updatePositions(List<IPacManAgent> friendlyAgents, PacManObservations enemyObservations)
+    public static void updatePositions(List<IPacManAgent> friendlyAgents, PacManObservations enemyObservations)
     {
         var newPositons = new List<Vector3>(_nrAgents);
         
@@ -60,20 +70,107 @@ public class CentralGameTracker
             }
             
         }
-        
-        
         agentPositions = newPositons;
-        
-        
-        
+                      
     }
 
-    
-    
+    /*
+     * Checks if the length of the food vector has changed
+     * If it has recalculates the flood clusters
+     */
+    public static void checkFood()
+    {
+        List<GameObject> newFoodPositions = agentAgentManager.GetFoodObjects();
+        if (newFoodPositions.Count != foodPositions.Count)
+        {
+            foodPositions = newFoodPositions;
+            updateFood();
+        }
+    }
 
+    /*
+     * Creates the food clusters from the list of food
+     * A cluster contains food that are on adjacent positions
+     * Sorts the food from the fursthest to x=0 to the closest
+     * Stores them in positivClusters and negativeClusters
+     */ 
+    private static void updateFood()
+    {
+        positiveClusters = new List<List<Vector3Int>>();
+        negativeClusters = new List<List<Vector3Int>>();
 
+        HashSet<Vector3Int> visited = new HashSet<Vector3Int>();
 
+        foreach (GameObject food in foodPositions)
+        {
+            Vector3Int position = obstacleMap.WorldToCell(food.transform.position);
 
+            if (!visited.Contains(position) )
+            {
+                List<Vector3Int> cluster = new List<Vector3Int>();
+                Queue<Vector3Int> queue = new Queue<Vector3Int>();
+                queue.Enqueue(position);
+                visited.Add(position);
 
+                // BFS to find all adjacent food positions
+                while (queue.Count > 0)
+                {
+                    Vector3Int current = queue.Dequeue();
+                    cluster.Add(current);
+                    foreach (Vector3Int neighbor in GetAdjacentCells(current))
+                    {   
+                        if (!visited.Contains(neighbor) && foodPositions.Any(f => obstacleMap.WorldToCell(f.transform.position) == neighbor))
+                        {
+                            queue.Enqueue(neighbor);
+                            visited.Add(neighbor);
+                          
+                        }
+                    }
+                }
+
+                // Add cluster to corresponding list
+                if (position.x >= 0)
+                {
+                    positiveClusters.Add(cluster);
+                }
+                else
+                {
+                    negativeClusters.Add(cluster);
+                }
+            }
+        }
+
+        // Sort clusters by their furthest x distance from x = 0
+        positiveClusters.Sort((a, b)=>CompareClusters(a, b));
+        negativeClusters.Sort((a, b)=>CompareClusters(b, a)); // Reversed for x < 0
+
+        // Store or use these sorted cluster lists as needed
+    }
+
+    /*
+     * Get a list containing the four adjacent cells of a cell position
+     */
+    private static List<Vector3Int> GetAdjacentCells(Vector3Int position)
+    {
+        List<Vector3Int> neighbors = new List<Vector3Int>();
+        int cellSize = 1; 
+
+        neighbors.Add(new Vector3Int(position.x + cellSize, position.y, position.z));
+        neighbors.Add(new Vector3Int(position.x - cellSize, position.y, position.z));
+        neighbors.Add(new Vector3Int(position.x, position.y, position.z + cellSize));
+        neighbors.Add(new Vector3Int(position.x, position.y, position.z - cellSize));
+
+        return neighbors;
+    }
+
+    /*
+     * Comparator for sorting clusters based on their furthest x distance from x = 0
+     */
+    private static int CompareClusters(List<Vector3Int> a, List<Vector3Int> b)
+    {
+        float maxXA = a.Max(pos=>Mathf.Abs(pos.x));
+        float maxXB = b.Max(pos=>Mathf.Abs(pos.x));
+        return maxXB.CompareTo(maxXA);
+    }
 
 }

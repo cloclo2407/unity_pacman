@@ -34,6 +34,7 @@ namespace PacMan
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
             
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
+            CentralGameTracker.Initialize(_agentAgentManager, _obstacleMap);
 
             isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
 
@@ -42,9 +43,7 @@ namespace PacMan
             Vector2Int start = new Vector2Int(-4, 5);
             Vector2Int goal = new Vector2Int(3, 2);
             List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
-            DrawPath(path);
-            Debug.Log(Defense.GetNumberOfPassages(isBlue));
-            
+            DrawPath(path);            
 
             nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
             
@@ -139,6 +138,8 @@ namespace PacMan
                 List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
                 DrawPath(path);
             }
+
+            CentralGameTracker.checkFood();
 
             // Since the RigidBody is updated server side and the client only syncs position, rigidbody.Velocity does not report a velocity
             _agentAgentManager.GetVelocity(); // Use the manager method to get the true velocity from the server
@@ -238,16 +239,13 @@ namespace PacMan
         
         private void OnDrawGizmos()
         {
-
-            DrawVeronoiMap();
-
-            DrawDefense();
-            DrawPacMan();
+            //DrawVeronoiMap();
+            //DrawDefense();
+            //DrawPacMan();
+            DrawFood();
             Gizmos.color = Color.green;
             Vector3 cell = _obstacleMap.CellToWorld(new Vector3Int(0, 0, 0)) + _obstacleMap.trueScale / 2;
-            Gizmos.DrawWireSphere(cell, 0.5f);
-            
-
+            Gizmos.DrawWireSphere(cell, 0.5f);    
         }
 
         private void DrawDefense()
@@ -274,6 +272,27 @@ namespace PacMan
                 Vector3 pos = transform.position;
                 Vector3 worldPos = _obstacleMap.CellToWorld(new Vector3Int((int)pos.x, 0, (int)pos.y)) + _obstacleMap.trueScale / 2;
                 Gizmos.DrawWireSphere(pos, 0.5f);
+            }
+        }
+
+        private void DrawFood()
+        {
+            Gizmos.color = Color.red;
+
+            foreach (var food in CentralGameTracker.positiveClusters)
+            {
+                Vector3Int pos = food[0];
+                Vector3 worldPos = _obstacleMap.CellToWorld(pos) + _obstacleMap.trueScale / 2;
+                Gizmos.DrawSphere(worldPos, 0.5f);
+            }
+
+            Gizmos.color = Color.blue;
+
+            foreach (var food in CentralGameTracker.negativeClusters)
+            {
+                Vector3Int pos = food[0];
+                Vector3 worldPos = _obstacleMap.CellToWorld(pos) + _obstacleMap.trueScale / 2;
+                Gizmos.DrawSphere(worldPos, 0.5f);
             }
         }
 
