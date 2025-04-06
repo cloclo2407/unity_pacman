@@ -15,6 +15,7 @@ public class CentralGameTracker
 
     public List<Vector3> agentPositions;
 
+    public List<Vector3> foodClusters;
 
     public void initialize(int nrFriendlyAgents, List<Vector3> spawnPositions)
     {
@@ -68,6 +69,12 @@ public class CentralGameTracker
         
     }
 
+
+
+    public void updateFoodClusters()
+    {
+        return;
+    }
     
     
 
