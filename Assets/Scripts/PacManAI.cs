@@ -57,9 +57,7 @@ namespace PacMan
             }
 
             //_veronoiMap = new VeronoiMap();
-            //_veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);
-            
-            
+            //_veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);             
         }
 
         public PacManAction Tick() //The Tick from the network controller
@@ -80,9 +78,6 @@ namespace PacMan
             //var friendlyAgentManager = _agentAgentManager.GetFriendlyAgents()[0];
             //friendlyAgentManager.IsGhost();
 
-            
-            
-            
             var agentIndex = 0;
             
             foreach (var _friendlyAgentManager in _agentAgentManager.GetFriendlyAgents())
@@ -108,40 +103,17 @@ namespace PacMan
                 }
             }
 
-            AssignDefense();
+            AssignDefense(); 
             if (isDefense)
             {
-                /*
-                // Example on how to draw the path between start and goal
-                Vector3 start3D = _obstacleMap.WorldToCell(_agentAgentManager.GetStartPosition());
-                Vector2Int start = new Vector2Int((int)start3D.x, (int)start3D.z);
-                Vector2Int goal = myDefensePosition;
-
-                List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
-                DrawPath(path);
-                */
-                
-
                 if (currentWaypointIndex == -1)
                 {
-                    Vector3 position3D = _obstacleMap.WorldToCell(gameObject.transform.position);
-                    Vector2Int position = new Vector2Int((int)position3D.x, (int)position3D.z);
-                    Vector2Int target = myDefensePosition;
-                    List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(position, target);
-                    GenerateWaypoints(path);
-                    currentWaypointIndex = 0;
-                }
-
-                
-                
-                
-                
-                
+                    GenerateWaypoints(myDefensePosition);
+                }     
             }
             //Attacking
             else
             {
-
                 if (currentWaypointIndex == -1)
                 {
                     GoGetFood();
@@ -151,7 +123,7 @@ namespace PacMan
                 {
                     reachedDestination = false;
 
-                    // If you've finished your path and are in the oposition home, go home
+                    // If you've finished your path and are in the opponent's home, go home
                     if ((transform.position.x >= 0 && isBlue) || (transform.position.x < 0 && !isBlue))
                     {
                         ReturnHome();
@@ -182,41 +154,7 @@ namespace PacMan
             // Since the RigidBody is updated server side and the client only syncs position, rigidbody.Velocity does not report a velocity
             _agentAgentManager.GetVelocity(); // Use the manager method to get the true velocity from the server
             // friendlyAgentManager.GetVelocity(); // Given the damping, max velocity magnitude is around 2.34
-
-            // // replace the human input below with some AI stuff
-            
-            /*
-            var x = 0;
-            var z = 0;
-
-            x = 1;
-            z = 1;
-
-            if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("w") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("up"))
-            {
-                z = 1;
-            }
-
-            if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("a") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("left"))
-            {
-                x = -1;
-            }
-
-            if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("s") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("down"))
-            {
-                z = -1;
-            }
-
-            if (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue && Input.GetKey("d") || TeamAssignmentUtil.CheckTeam(gameObject) == Team.Red && Input.GetKey("right"))
-            {
-                x = 1;
-            }
-            */
-
-            
-            
-            
-            
+                    
             return PDControll();
         }
 
@@ -302,8 +240,6 @@ namespace PacMan
             //DrawPacMan();
             //DrawFood();
             //Gizmos.color = Color.green;
-            //Vector3 cell = _obstacleMap.CellToWorld(new Vector3Int(0, 0, 0)) + _obstacleMap.trueScale / 2;
-            //Gizmos.DrawWireSphere(cell, 0.5f);   
             DrawCurrentWaypoint();
             
             DrawWaypoints();
@@ -331,7 +267,6 @@ namespace PacMan
             {
                 Gizmos.color = Color.blue;
             }
-            
             Gizmos.DrawSphere(waypoints[currentWaypointIndex], 0.3f);
             
         }
@@ -345,8 +280,7 @@ namespace PacMan
             }
             
             foreach (var pos in waypoints)
-            {
-                
+            {              
                 Gizmos.DrawSphere(pos, 0.1f);
             }
         }
@@ -420,9 +354,12 @@ namespace PacMan
             }
         }
 
-
-        private void GenerateWaypoints(List<Vector2Int> path)
+        private void GenerateWaypoints(Vector2Int destination)
         {
+            Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, destination);
+
             waypoints = new List<Vector3>(path.Count);
             for (int i = 0; i < path.Count; i++)
             {
@@ -431,19 +368,12 @@ namespace PacMan
 
                 waypoints.Add(waypoint);
             }
+            currentWaypointIndex = 0;
         }
-        
-        private void GenerateWaypointsCluster(List<Vector2Int> path, List<Vector3Int> cluster)
-        {
-            //Assumes the path ends at a food inside the cluster
-            waypoints = new List<Vector3>(path.Count);
-            for (int i = 0; i < path.Count - 1; i++)
-            {
-                Vector3 waypoint = _obstacleMap.CellToWorld(new Vector3Int((int)path[i].x, 0, (int)path[i].y)) + _obstacleMap.trueScale / 2;
-                waypoint.y = 0f;
 
-                waypoints.Add(waypoint);
-            }
+        private void GenerateWaypointsCluster(Vector2Int closestFood, List<Vector3Int> cluster)
+        {
+            GenerateWaypoints(closestFood);
 
             var worldCluster = new List<Vector3>();
             foreach (var cell in cluster)
@@ -455,7 +385,10 @@ namespace PacMan
 
             foreach (var point in worldCluster)
             {
-                waypoints.Add(point + _obstacleMap.trueScale / 2);
+                if (point != waypoints[^1])
+                {
+                    waypoints.Add(point + _obstacleMap.trueScale / 2);
+                }
             }
         }
 
@@ -464,20 +397,14 @@ namespace PacMan
             Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
             Vector2Int closestHome = AllPairsShortestPaths.GetClosestHomeCell(myCell, isBlue);
-            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, closestHome);
-            GenerateWaypoints(path);
-            currentWaypointIndex = 0;
+            GenerateWaypoints(closestHome);
         }
         
         private void GoGetFood()
-        {
-            Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
-            Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+        { 
             var (closestFood, closestFoodCluster) = CentralGameTracker.FindClosestFoodCluster(gameObject.transform.position, isBlue);
             Vector2Int target = new Vector2Int(closestFood.x, closestFood.z);
-            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, target);
-            GenerateWaypointsCluster(path, closestFoodCluster);
-            currentWaypointIndex = 0;
+            GenerateWaypointsCluster(target, closestFoodCluster);
         }
     }
 

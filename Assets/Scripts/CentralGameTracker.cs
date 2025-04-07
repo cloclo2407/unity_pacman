@@ -193,12 +193,9 @@ public static class CentralGameTracker
                         closestCluster = cluster;
                         closestFood = pos;
                         closestDistance = (pos - startPos).magnitude;
-                    }
-                    
-                }
-            
+                    }                   
+                }           
             }
-
         }
         else
         {
