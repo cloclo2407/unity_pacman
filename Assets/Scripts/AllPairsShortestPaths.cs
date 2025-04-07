@@ -163,18 +163,8 @@ public class AllPairsShortestPaths
                 // Check if the cell is traversable
                 if (cell.Value != ObstacleMap.Traversability.Blocked)
                 {
-                    // If current cell is x=-1, check if x=0 at the same y is free
-                    if (pos.x == -1)
-                    {
-                        Vector2Int rightCell = new Vector2Int(0, pos.y);
-                        if (obstacleMap.traversabilityPerCell.ContainsKey(rightCell) &&
-                            obstacleMap.traversabilityPerCell[rightCell] != ObstacleMap.Traversability.Blocked)
-                        {
-                            transitionPairs.Add((pos, rightCell));
-                        }
-                    }
                     // If current cell is x=0, check if x=-1 at the same y is free
-                    else if (pos.x == 0)
+                    if (pos.x == 0)
                     {
                         Vector2Int leftCell = new Vector2Int(-1, pos.y);
                         if (obstacleMap.traversabilityPerCell.ContainsKey(leftCell) &&
@@ -246,6 +236,30 @@ public class AllPairsShortestPaths
         path.Add(start);
         path.Reverse();
         return path;
+    }
+
+    public static Vector2Int GetClosestHomeCell(Vector2Int position, bool isBlue)
+    {
+        float minDistance = float.MaxValue;
+        Vector2Int closest = position;
+
+        foreach (var (leftCell, rightCell) in transitionPairs)
+        {
+            Vector2Int candidate = isBlue ? rightCell : leftCell;
+
+            // Double-check that candidate is reachable
+            if (!distances[position].ContainsKey(candidate))
+                continue;
+
+            float dist = distances[position][candidate];
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                closest = candidate;
+            }
+        }
+
+        return closest;
     }
 
 }

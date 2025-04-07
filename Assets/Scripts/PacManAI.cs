@@ -13,25 +13,28 @@ namespace PacMan
         private ObstacleMap _obstacleMap;
         private MapManager _mapManager;
 
+        //General Info
+        int pacManIndex = 0;
+        private bool isBlue;
+        private int nrOfFriendlyAgents;
         private List<Vector3> allAgentPositions;
         
-        private bool isBlue;
+        //Defense
         private bool isDefense = true;
         private Vector2Int myDefensePosition;
         private List<Vector2Int> defensePositions;
 
-        int pacManIndex = 0;
-
+        //Pd tracker
         private float k_p = 2;
         private float k_d = 2;
 
-        private int nrOfFriendlyAgents;
-
-
+        //Veronoi
         private VeronoiMap _veronoiMap;
 
+        //Path
         private List<Vector3> waypoints;
         private int currentWaypointIndex = -1;
+        private bool reachedDestination = false;
 
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
@@ -42,14 +45,7 @@ namespace PacMan
             AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
             CentralGameTracker.Initialize(_agentAgentManager, _obstacleMap);
 
-            isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
-
-            // Example on how to draw the path between start and goal
-            
-            Vector2Int start = new Vector2Int(-4, 5);
-            Vector2Int goal = new Vector2Int(3, 2);
-            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(start, goal);
-            DrawPath(path);            
+            isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);    
 
             nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
             
@@ -111,11 +107,6 @@ namespace PacMan
                      agentIndex++;
                 }
             }
-            
-            
-            
-            
-
 
             AssignDefense();
             if (isDefense)
@@ -140,6 +131,8 @@ namespace PacMan
                     GenerateWaypoints(path);
                     currentWaypointIndex = 0;
                 }
+
+                
                 
                 
                 
@@ -151,27 +144,22 @@ namespace PacMan
 
                 if (currentWaypointIndex == -1)
                 {
-                    Vector3 position3D = _obstacleMap.WorldToCell(gameObject.transform.position);
-                    Vector2Int position = new Vector2Int((int)position3D.x, (int)position3D.z);
-
-                    var (closestFood, closestFoodCluster) = CentralGameTracker.FindClosestFoodCluster(gameObject.transform.position, isBlue);
-                    
-                    Vector2Int target =  new Vector2Int((int)closestFood.x, (int)closestFood.z);
-                    List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(position, target);
-                    GenerateWaypointsCluster(path, closestFoodCluster);
-                    currentWaypointIndex = 0;
+                    GoGetFood();
                 }
 
-                //If we are are the final waypoint
-                if (currentWaypointIndex == waypoints.Count - 1)
+                if (reachedDestination)
                 {
-                    //TODO
-                    //waypoints = new List<Vector3>();
-                    //waypoints.Add(new Vector3(0,0,0));
+                    reachedDestination = false;
 
-                    waypoints.Reverse();
-                    currentWaypointIndex = 0;
-                
+                    // If you've finished your path and are in the oposition home, go home
+                    if ((transform.position.x >= 0 && isBlue) || (transform.position.x < 0 && !isBlue))
+                    {
+                        ReturnHome();
+                    }
+                    else
+                    {
+                        GoGetFood();
+                    }
                 }
             }
 
@@ -182,6 +170,10 @@ namespace PacMan
                 {
                     currentWaypointIndex += 1;
                     
+                }
+                else
+                {
+                    reachedDestination = true;
                 }
             }
 
@@ -234,8 +226,7 @@ namespace PacMan
             Vector3 targetPos = waypoints[currentWaypointIndex];
             
             Vector3 posError = targetPos - currentPos;
-            
-            
+                      
             Vector3 currentVelocity = _agentAgentManager.GetVelocity();
             Vector3 targetVelocity = posError / Time.fixedDeltaTime;
 
@@ -243,8 +234,6 @@ namespace PacMan
 
             Vector3 desiredAcc = k_p * posError + k_d * velocityError;
             
-            
-
             var droneAction = new PacManAction
             {
                 AccelerationDirection = new Vector2(desiredAcc.x, desiredAcc.z), // Controller converts to [0; 1] normalized acceleration vector,
@@ -309,7 +298,7 @@ namespace PacMan
         private void OnDrawGizmos()
         {
             //DrawVeronoiMap();
-            //DrawDefense();
+            DrawDefense();
             //DrawPacMan();
             //DrawFood();
             //Gizmos.color = Color.green;
@@ -435,7 +424,7 @@ namespace PacMan
         private void GenerateWaypoints(List<Vector2Int> path)
         {
             waypoints = new List<Vector3>(path.Count);
-            for (int i = 0; i < path.Count - 1; i++)
+            for (int i = 0; i < path.Count; i++)
             {
                 Vector3 waypoint = _obstacleMap.CellToWorld(new Vector3Int((int)path[i].x, 0, (int)path[i].y)) + _obstacleMap.trueScale / 2;
                 waypoint.y = 0f;
@@ -469,10 +458,27 @@ namespace PacMan
                 waypoints.Add(point + _obstacleMap.trueScale / 2);
             }
         }
+
+        private void ReturnHome()
+        {
+            Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+            Vector2Int closestHome = AllPairsShortestPaths.GetClosestHomeCell(myCell, isBlue);
+            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, closestHome);
+            GenerateWaypoints(path);
+            currentWaypointIndex = 0;
+        }
         
-        
-        
-        
+        private void GoGetFood()
+        {
+            Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+            var (closestFood, closestFoodCluster) = CentralGameTracker.FindClosestFoodCluster(gameObject.transform.position, isBlue);
+            Vector2Int target = new Vector2Int(closestFood.x, closestFood.z);
+            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, target);
+            GenerateWaypointsCluster(path, closestFoodCluster);
+            currentWaypointIndex = 0;
+        }
     }
 
 }

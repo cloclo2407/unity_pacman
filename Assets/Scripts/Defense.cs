@@ -15,8 +15,7 @@ public class Defense
         passageGroups = new();
 
         // Filter transition pairs based on the team side
-        List<(Vector2Int, Vector2Int)> filteredPairs = AllPairsShortestPaths.transitionPairs
-            .FindAll(pair => pair.Item1.x >= 0);
+        List<(Vector2Int, Vector2Int)> filteredPairs = AllPairsShortestPaths.transitionPairs;
 
         // Sort by y-coordinate
         filteredPairs.Sort((a, b) => a.Item1.y.CompareTo(b.Item1.y));
