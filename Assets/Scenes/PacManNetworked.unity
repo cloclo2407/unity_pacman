@@ -31671,7 +31671,7 @@ PrefabInstance:
     - target: {fileID: 7837646406789576333, guid: 4d3d2631ce8f3f648bbc5f84edab06df,
         type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 2687533648
+      value: 3007565436
       objectReference: {fileID: 0}
     - target: {fileID: 8242595891905423591, guid: 4d3d2631ce8f3f648bbc5f84edab06df,
         type: 3}
@@ -31686,7 +31686,7 @@ PrefabInstance:
     - target: {fileID: 8631366623949714217, guid: 4d3d2631ce8f3f648bbc5f84edab06df,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.18
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 1226976318235176704, guid: 4d3d2631ce8f3f648bbc5f84edab06df, type: 3}
