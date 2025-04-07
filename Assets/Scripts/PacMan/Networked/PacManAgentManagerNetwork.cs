@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using PacMan.PacMan;
 using Scripts.Map;
 using Unity.Collections;
@@ -39,7 +38,6 @@ namespace PacMan
 
         private PacManObservations _latestKnownObservations;
         private bool initialized;
-        private Thread planningThread;
 
         public void OnTransformParentChanged()
         {
@@ -60,12 +58,6 @@ namespace PacMan
         {
             NetworkManager.Singleton.NetworkTickSystem.Tick -= NetworkTick;
             base.OnNetworkDespawn();
-            planningThread.Abort();
-        }
-
-        public override void OnDestroy()
-        {
-            if(planningThread != null && planningThread.IsAlive) planningThread.Abort();
         }
 
         public virtual void Initialize()
@@ -90,11 +82,6 @@ namespace PacMan
                 }
 
                 initialized = true;
-                
-                ThreadStart work = pacManAI.Plan;
-                planningThread = new Thread(work);
-                planningThread.Start();
-              
             }
 
             if (!initialized) return;
@@ -142,17 +129,14 @@ namespace PacMan
             //When reading this, keep in mind that NetworkBehaviors are executed on each instance of the game in parallel.
             if (IsOwner)
             {
-                if (_pacManGameManager.matchTime >= _pacManGameManager.planningLength)
+                var action = pacManAI.Tick(); // Calculate new action
+                if (NetworkManager.IsServer)
                 {
-                    var action = pacManAI.Tick(); // Calculate new action
-                    if (NetworkManager.IsServer)
-                    {
-                        m_action = action; // If owned by server (host mode) store action directly.
-                    }
-                    else
-                    {
-                        UpdateServerSideActionServerRpc(action); // Send latest known action to server. Will be applied by the server.
-                    }
+                    m_action = action; // If owned by server (host mode) store action directly.
+                }
+                else
+                {
+                    UpdateServerSideActionServerRpc(action); // Send latest known action to server. Will be applied by the server.
                 }
             }
         }
@@ -204,10 +188,7 @@ namespace PacMan
         [ServerRpc]
         public void UpdateServerSideActionServerRpc(PacManAction action)
         {
-            if(_pacManGameManager.matchTime >= _pacManGameManager.planningLength)
-            {
-                m_action = action; // Store latest known action on server side
-            }
+            m_action = action; // Store latest known action on server side
         }
 
         public void FixedUpdate()

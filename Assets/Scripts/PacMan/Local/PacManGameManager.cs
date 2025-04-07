@@ -21,8 +21,7 @@ namespace PacMan.Local
         protected float StartTime;
         public float matchTime;
         public float matchLength = 240; //From original 3000 / 4
-        public float planningLength = 30;
-        
+
         public bool finished = false;
         public int agentsPerTeam;
         public string teamName = "";

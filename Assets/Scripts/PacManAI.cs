@@ -10,7 +10,6 @@ namespace PacMan
         private IPacManAgent _agentAgentManager;
         private ObstacleMap _obstacleMap;
         private MapManager _mapManager;
-        private bool _haveBeenTicked = false;
 
         public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
@@ -19,26 +18,8 @@ namespace PacMan
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one);
         }
 
-        public void Plan()
-        {
-            // This is a separate thread, so you can plan here as much as you like. You should set a flag in the tick method that you can detect if you want to maximize planning time.
-            
-            // Debug.Log("Planning"); 
-            // while (true)
-            // {
-            //     if (_haveBeenTicked)
-            //     {
-            //         Debug.Log("Match started!");
-            //         break;
-            //     }
-            // }  
-            
-            // NB! This thread should always exit gracefully! Otherwise your editor might hang. If you dont need it, leave it empty.
-        }
-        
         public PacManAction Tick() //The Tick from the network controller
         {
-            _haveBeenTicked = true;
             _agentAgentManager.GetTimeRemaining();
             _agentAgentManager.GetScore();
             bool isGhost = _agentAgentManager.IsGhost();
@@ -98,7 +79,5 @@ namespace PacMan
 
             return droneAction;
         }
-
-  
     }
 }

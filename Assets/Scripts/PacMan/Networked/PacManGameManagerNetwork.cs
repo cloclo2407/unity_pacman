@@ -73,6 +73,5 @@ namespace PacMan
                 if (transf.name.ToLower().Contains("capsule")) capsules.Add(transf.gameObject);
             }
         }
-        
     }
 }

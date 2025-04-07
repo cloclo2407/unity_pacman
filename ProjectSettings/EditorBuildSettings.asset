@@ -5,8 +5,8 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/PacManNetworked.unity
-    guid: 22161aa783914a0c87ca0b27fcb11b26
+    guid: fddedffcdd4345a8b5d94aaa9d1a66bc
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0
