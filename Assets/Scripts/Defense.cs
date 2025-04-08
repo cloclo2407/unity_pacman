@@ -51,8 +51,9 @@ public class Defense
     /*
      * Return a list of position where we should put the defense pacman
      * The positions are equi situated among all the positions that allow crossing between both sides
+     * If possible the defense cell is two or three cells away from the border
      */
-    public static List<Vector2Int> GetDefensePositions(int n, bool isBlue)
+    public static List<Vector2Int> GetDefensePositions(int n, bool isBlue, ObstacleMap obstacleMap)
     {
         List<Vector2Int> selectedPositions = new();
 
@@ -82,7 +83,24 @@ public class Defense
         {
             int index = i * step + step / 2; // Centered selection
             index = Mathf.Clamp(index, 0, allPositions.Count - 1);
-            selectedPositions.Add(allPositions[index]);
+            Vector2Int pos = allPositions[index];
+
+            // Determine direction away from x=0
+            int direction = isBlue ? -1 : 1;
+
+            // Check further cells
+            Vector2Int nextPos1 = new(pos.x + direction, pos.y);
+            if (obstacleMap.traversabilityPerCell[nextPos1] == ObstacleMap.Traversability.Free)
+            {
+                pos = nextPos1;
+                Vector2Int nextPos2 = new(pos.x + direction, pos.y);
+                if (obstacleMap.traversabilityPerCell[nextPos2] == ObstacleMap.Traversability.Free)
+                {
+                    pos = nextPos2;
+                }
+            }
+
+            selectedPositions.Add(pos);
         }
 
         return selectedPositions;

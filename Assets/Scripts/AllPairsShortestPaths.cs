@@ -41,7 +41,7 @@ public class AllPairsShortestPaths
 
     /*
      * Calculates all pairs shortest paths in a graph
-     * Returns the dictionary contains the distances
+     * Returns the dictionary that contains the distances
      * Stores the predecessor of each node in predecessor for computing the path
      */
     public static Dictionary<Vector2Int, Dictionary<Vector2Int, float>> FloydWarshall(Dictionary<Vector2Int, List<(Vector2Int, float)>> graph)
@@ -188,7 +188,7 @@ public class AllPairsShortestPaths
         var path = new List<Vector2Int>();
         if (!predecessor.ContainsKey(start) || !predecessor[start].ContainsKey(goal))
         {
-            Debug.Log("not in predecessor");
+            Debug.Log("not in predecessor: " + start + goal);
             return path;
         }
 

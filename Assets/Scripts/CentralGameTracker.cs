@@ -19,9 +19,13 @@ public static class CentralGameTracker
     public static List<Vector3> agentPositions;
 
     private static List<GameObject> foodPositions;
+    private static HashSet<Vector3Int> previousFoodCells = new HashSet<Vector3Int>();
+    private static HashSet<Vector3Int> currentFoodCells = new HashSet<Vector3Int>();
+    
     public static List<List<Vector3Int>> positiveClusters;
     public static List<List<Vector3Int>> negativeClusters;
 
+    private static Dictionary<int, DefenseAssignment> agentDefenseStates = new(); // PacmanIndex -> Assignment
 
     public static void Initialize(IPacManAgent _agentAgentManager, ObstacleMap _obstacleMap)
     {
@@ -30,7 +34,6 @@ public static class CentralGameTracker
         _nrAgents = 2 * _nrFriendlyAgents;
         agentAgentManager = _agentAgentManager;
         obstacleMap = _obstacleMap;
-        foodPositions = new List<GameObject>();
         checkFood();
 
         _initialized = true;
@@ -81,19 +84,29 @@ public static class CentralGameTracker
     public static void checkFood()
     {
         List<GameObject> newFoodPositions = agentAgentManager.GetFoodObjects();
-        if (newFoodPositions.Count != foodPositions.Count)
+
+        // Convert current food to cell positions
+        currentFoodCells = new HashSet<Vector3Int>(newFoodPositions.Select(f => obstacleMap.WorldToCell(f.transform.position)));
+
+        // Check for loss only if food count changed
+        if (currentFoodCells.Count != previousFoodCells.Count)
         {
+            // Update clusters and food cache
             foodPositions = newFoodPositions;
             updateFood();
         }
+
+        // Always update previousFoodCells at the end
+        previousFoodCells = new HashSet<Vector3Int>(currentFoodCells);
     }
+
 
     /*
      * Creates the food clusters from the list of food
      * A cluster contains food that are on adjacent positions
      * Sorts the food from the fursthest to x=0 to the closest
      * Stores them in positivClusters and negativeClusters
-     */ 
+     */
     private static void updateFood()
     {
         positiveClusters = new List<List<Vector3Int>>();
@@ -173,9 +186,6 @@ public static class CentralGameTracker
         return maxXB.CompareTo(maxXA);
     }
 
-    
-
-
     public static (Vector3Int, List<Vector3Int>) FindClosestFoodCluster(Vector3 startPos, bool isBlue)
     {            
         List<Vector3Int> closestCluster = new List<Vector3Int>();
@@ -216,9 +226,134 @@ public static class CentralGameTracker
 
         return (closestFood, closestCluster);
     }
-    
-    
-    
-    
 
+    public static Vector3Int? CheckForFoodLoss(bool isBlue)
+    {
+        // Any lost food in our half?
+        HashSet<Vector3Int> lost = new HashSet<Vector3Int>(previousFoodCells);
+        lost.ExceptWith(currentFoodCells);
+
+        foreach (var cell in lost)
+        {
+            if (IsOnMySide(cell, isBlue))
+            {
+                return cell;
+            }
+        }
+
+        return null;
+    }
+
+    public static bool IsOnMySide(Vector3 pos, bool isBlue)
+    {
+        return isBlue ? pos.x < 0 : pos.x >= 0;
+    }
+
+    public static void UpdateDefenseAssignments(List<IPacManAgent> defenders, bool isBlue)
+    {
+        agentDefenseStates.Clear();
+
+        List<(GameObject intruder, Vector3 position)> visible = new();
+        List<Vector3> noisy = new();
+
+        // 1. Find visible intruders on your side
+        foreach (var agent in defenders)
+        {
+            foreach (var enemy in agent.GetVisibleEnemyAgents())
+            {
+                if (IsOnMySide(enemy.gameObject.transform.position, isBlue))
+                {
+                    visible.Add((enemy.gameObject, enemy.gameObject.transform.position));
+                }
+            }
+        }
+
+        // 2. Assign one defender per visible intruder
+        int i = 0;
+        foreach (var v in visible)
+        {
+            if (i >= defenders.Count) break;
+            var defender = defenders[i];
+            var pacIndex = defenders.IndexOf(defender);
+            agentDefenseStates[pacIndex] = new DefenseAssignment
+            {
+                State = DefenseState.Chase,
+                TargetPosition = v.position,
+                TargetIntruder = v.intruder
+            };
+            i++;
+        }
+
+        // 3. Noisy enemies
+        foreach (var obs in defenders[0].GetEnemyObservations().Observations)
+        {
+            if (obs.Position.sqrMagnitude > 0.01f && IsOnMySide(obs.Position, isBlue))
+            {
+                noisy.Add(obs.Position);
+            }
+        }
+        
+        foreach (var guess in noisy)
+        {
+            if (i >= defenders.Count) break;
+            var pacIndex = defenders.IndexOf(defenders[i]);
+            agentDefenseStates[pacIndex] = new DefenseAssignment
+            {
+                State = DefenseState.Investigate,
+                TargetPosition = guess
+            };
+            i++;
+        }
+
+        // 4. Lost food?
+        Vector3Int? lostFood = CheckForFoodLoss(isBlue);
+        if (lostFood != null)
+        {
+            Vector3 worldLost = obstacleMap.CellToWorld(lostFood.Value);
+            if (i < defenders.Count)
+            {
+                var pacIndex = defenders.IndexOf(defenders[i]);
+                agentDefenseStates[pacIndex] = new DefenseAssignment
+                {
+                    State = DefenseState.Investigate,
+                    TargetPosition = worldLost
+                };
+                i++;
+            }
+        }
+
+        // 5. Remaining defenders patrol/idle
+        for (; i < defenders.Count; i++)
+        {
+            var pacIndex = defenders.IndexOf(defenders[i]);
+            agentDefenseStates[pacIndex] = new DefenseAssignment
+            {
+                State = DefenseState.Idle
+            };
+        }
+    }
+
+    public static DefenseAssignment GetDefenseAssignment(int pacManIndex)
+    {
+        if (agentDefenseStates.TryGetValue(pacManIndex, out var assignment))
+            return assignment;
+
+        return new DefenseAssignment { State = DefenseState.Idle };
+    }
+    public enum DefenseState
+    {
+        Idle,
+        Patrol,
+        Chase,
+        Investigate,
+        Return
+    }
+
+    public struct DefenseAssignment
+    {
+        public DefenseState State;
+        public Vector3? TargetPosition;
+        public GameObject TargetIntruder;
+    }
 }
+

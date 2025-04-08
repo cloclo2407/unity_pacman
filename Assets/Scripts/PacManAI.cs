@@ -18,11 +18,20 @@ namespace PacMan
         private bool isBlue;
         private int nrOfFriendlyAgents;
         private List<Vector3> allAgentPositions;
+        private Vector2Int startCell;
+        private Vector2Int oldCell;
+        private bool respawned = false;
         
         //Defense
         private bool isDefense = true;
         private Vector2Int myDefensePosition;
         private List<Vector2Int> defensePositions;
+        private GameObject visibleIntruder;
+        private Vector3? noisyIntruderGuess;
+        public Vector3? lastStolenFoodPos;
+        private float suspiciousCooldown = 5f;
+        public float lastFoodLossTime = -100f;
+        private CentralGameTracker.DefenseState currentDefenseState = CentralGameTracker.DefenseState.Idle;
 
         //Pd tracker
         private float k_p = 2;
@@ -32,6 +41,7 @@ namespace PacMan
         private VeronoiMap _veronoiMap;
 
         //Path
+        private List<Vector2Int> path = new List<Vector2Int>();
         private List<Vector3> waypoints;
         private int currentWaypointIndex = -1;
         private bool reachedDestination = false;
@@ -55,6 +65,12 @@ namespace PacMan
             {
                 allAgentPositions.Add(startPositions[i]);
             }
+
+            Vector3Int startCell3D = _obstacleMap.WorldToCell(transform.position);
+            startCell = new Vector2Int(startCell3D.x, startCell3D.z);
+            oldCell = startCell;
+            Debug.Log("start: " + startCell);
+
 
             //_veronoiMap = new VeronoiMap();
             //_veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);             
@@ -103,14 +119,69 @@ namespace PacMan
                 }
             }
 
-            AssignDefense(); 
-            if (isDefense)
+            Vector3Int currentCell3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int currentCell = new Vector2Int(currentCell3D.x, currentCell3D.z);
+            if (currentCell == startCell && Vector2Int.Distance(currentCell, oldCell) > 1)
             {
-                if (currentWaypointIndex == -1)
-                {
-                    GenerateWaypoints(myDefensePosition);
-                }     
+                respawned = true;
+                Debug.Log(Vector2Int.Distance(currentCell, oldCell));
+                GenerateWaypoints(path[^1]);
             }
+            else respawned = false;
+            oldCell = currentCell;
+
+            AssignDefense(); // TO DO : Move to pre-planning
+
+            if (isDefense && isBlue)
+            {
+                if (pacManIndex == 0) // First agent updates assignment once per tick
+                {
+                    CentralGameTracker.UpdateDefenseAssignments(_agentAgentManager.GetFriendlyAgents(), isBlue);
+                }
+
+                var assignment = CentralGameTracker.GetDefenseAssignment(pacManIndex);
+
+                switch (assignment.State)
+                {
+                    case CentralGameTracker.DefenseState.Idle:
+                        Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
+                        Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+                        if (myCell != myDefensePosition) GoToDefensePosition();
+                        else ContinuePatrol();
+                        break;
+
+                    case CentralGameTracker.DefenseState.Patrol:
+                        ContinuePatrol();
+                        break;
+
+                    case CentralGameTracker.DefenseState.Chase:
+                        if (assignment.TargetIntruder != null)
+                        {
+                            Vector3Int position3D = _obstacleMap.WorldToCell(assignment.TargetIntruder.transform.position);
+                            GenerateWaypoints(new Vector2Int(position3D.x, position3D.z));
+                        }
+                        break;
+
+                    case CentralGameTracker.DefenseState.Investigate:
+                        if (assignment.TargetPosition.HasValue)
+                        {
+                            Vector3Int cell = _obstacleMap.WorldToCell(assignment.TargetPosition.Value);
+                            GenerateWaypoints(new Vector2Int(cell.x, cell.z));
+                        }
+                        break;
+
+                    case CentralGameTracker.DefenseState.Return:
+                        GoToDefensePosition();
+                        break;
+                }
+            }
+
+            else if (isDefense && !isBlue)
+            {
+                if (waypoints == null) GoToDefensePosition();
+                else ContinuePatrol();
+            }
+
             //Attacking
             else
             {
@@ -136,7 +207,7 @@ namespace PacMan
             }
 
             var tol = 0.5f;
-            if ((gameObject.transform.position - waypoints[currentWaypointIndex]).magnitude < tol)
+            if (waypoints.Count >0 && (gameObject.transform.position - waypoints[currentWaypointIndex]).magnitude < tol)
             {
                 if (currentWaypointIndex < waypoints.Count - 1)
                 {
@@ -161,7 +232,12 @@ namespace PacMan
         private PacManAction PDControll(float magnitude = 1f)
         {
             Vector3 currentPos = gameObject.transform.position;
-            Vector3 targetPos = waypoints[currentWaypointIndex];
+
+            Vector3 targetPos = transform.position;
+            if (waypoints.Count >0)
+            {
+                targetPos = waypoints[currentWaypointIndex];
+            }
             
             Vector3 posError = targetPos - currentPos;
                       
@@ -240,8 +316,7 @@ namespace PacMan
             //DrawPacMan();
             //DrawFood();
             //Gizmos.color = Color.green;
-            DrawCurrentWaypoint();
-            
+            DrawCurrentWaypoint();  
             DrawWaypoints();
             
         }
@@ -267,8 +342,7 @@ namespace PacMan
             {
                 Gizmos.color = Color.blue;
             }
-            Gizmos.DrawSphere(waypoints[currentWaypointIndex], 0.3f);
-            
+            if (waypoints.Count >0) Gizmos.DrawSphere(waypoints[currentWaypointIndex], 0.3f);
         }
         
         private void DrawWaypoints()
@@ -332,7 +406,7 @@ namespace PacMan
             else attackers = 2;
             
             // Get defense positions
-            defensePositions = Defense.GetDefensePositions(agentCount - attackers, isBlue);
+            defensePositions = Defense.GetDefensePositions(agentCount - attackers, isBlue, _obstacleMap);
 
             // Sort agents based on their respawn X position (closer to 0 attacks)
             friendlyAgents.Sort((a, b) => Mathf.Abs(a.GetStartPosition().x).CompareTo(Mathf.Abs(b.GetStartPosition().x)));
@@ -358,7 +432,10 @@ namespace PacMan
         {
             Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
-            List<Vector2Int> path = AllPairsShortestPaths.ComputeShortestPath(myCell, destination);
+
+            if (path.Count > 1 && path[0] == myCell && path[path.Count - 1] == destination) return;
+
+            path = AllPairsShortestPaths.ComputeShortestPath(myCell, destination);
 
             waypoints = new List<Vector3>(path.Count);
             for (int i = 0; i < path.Count; i++)
@@ -369,6 +446,7 @@ namespace PacMan
                 waypoints.Add(waypoint);
             }
             currentWaypointIndex = 0;
+            reachedDestination = false;
         }
 
         private void GenerateWaypointsCluster(Vector2Int closestFood, List<Vector3Int> cluster)
@@ -406,6 +484,107 @@ namespace PacMan
             Vector2Int target = new Vector2Int(closestFood.x, closestFood.z);
             GenerateWaypointsCluster(target, closestFoodCluster);
         }
-    }
 
+        private void UpdateDefenseState()
+        {
+            visibleIntruder = null;
+            noisyIntruderGuess = null;
+
+            // 1. Check visible enemies // TO DO : Modify for only one going there 
+            foreach (var enemy in _agentAgentManager.GetVisibleEnemyAgents())
+            {
+                if (CentralGameTracker.IsOnMySide(enemy.gameObject.transform.position, isBlue))
+                {
+                    visibleIntruder = enemy.gameObject;
+                    currentDefenseState = CentralGameTracker.DefenseState.Chase;
+                    return;
+                }
+            }
+
+            // 2. Noisy enemies (fast-moving ghosts) // TO DO : Modify for only one going there
+            foreach (var obs in _agentAgentManager.GetEnemyObservations().Observations)
+            {
+                if (obs.Position.sqrMagnitude > 0.01f && CentralGameTracker.IsOnMySide(obs.Position, isBlue))
+                {
+                    noisyIntruderGuess = obs.Position;
+                    currentDefenseState = CentralGameTracker.DefenseState.Investigate;
+                    return;
+                }
+            }
+
+            // 3. Food disappeared?
+            var lostFood = CentralGameTracker.CheckForFoodLoss(isBlue);
+            if (lostFood != null)
+            {
+                if (CentralGameTracker.IsOnMySide(_obstacleMap.CellToWorld(lostFood.Value), isBlue))
+                {
+                    lastStolenFoodPos = _obstacleMap.CellToWorld(lostFood.Value);
+                    lastFoodLossTime = Time.time;
+                    currentDefenseState = CentralGameTracker.DefenseState.Investigate;
+                    return;
+                }
+            }
+
+            // 4. If previously investigating and timeout expired
+            if (currentDefenseState == CentralGameTracker.DefenseState.Investigate && Time.time - lastFoodLossTime > suspiciousCooldown)
+            {
+                currentDefenseState = CentralGameTracker.DefenseState.Return;
+            }
+
+            // 5. If back at my defense position
+            Vector3Int myPosition3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int myPosition = new Vector2Int(myPosition3D.x, myPosition3D.z);
+            if (currentDefenseState == CentralGameTracker.DefenseState.Return &&  myPosition == myDefensePosition)
+            {
+                currentDefenseState = CentralGameTracker.DefenseState.Idle;
+            }
+        }
+
+        private void GoToDefensePosition()
+        {
+            GenerateWaypoints(myDefensePosition);
+        }
+
+        private void PatrolAroundDefensePosition()
+        {
+            //if ((currentDefenseState != DefenseState.Patrol) || (currentDefenseState == DefenseState.Patrol && ((gameObject.transform.position - waypoints[^1]).magnitude < 0.2f)))
+            {
+                // Patrol 2 units above/below defense point
+                Vector2Int offset = new Vector2Int(0, 2);
+                Vector2Int patrolTarget = (UnityEngine.Random.value > 0.5f) ? myDefensePosition + offset : myDefensePosition - offset;
+
+                GenerateWaypoints(patrolTarget);
+                currentDefenseState = CentralGameTracker.DefenseState.Patrol;
+            }
+        }
+
+        private void ContinuePatrol()
+        {
+            if (reachedDestination)
+            {
+                currentDefenseState = CentralGameTracker.DefenseState.Idle;
+            }
+        }
+
+        private void ChaseIntruder() // TO DO : Modify to go between the separation and the intruder
+        {
+            if (visibleIntruder == null)
+            {
+                currentDefenseState = CentralGameTracker.DefenseState.Return;
+                return;
+            }
+
+            Vector3Int cell = _obstacleMap.WorldToCell(visibleIntruder.transform.position);
+
+            GenerateWaypoints(new Vector2Int(cell.x, cell.z));
+        }
+
+        private void InvestigateSuspiciousArea()
+        {
+            Vector3 target = noisyIntruderGuess ?? lastStolenFoodPos ?? transform.position;
+            Vector3Int cell = _obstacleMap.WorldToCell(target);
+            GenerateWaypoints(new Vector2Int(cell.x, cell.z));
+        }
+
+    }
 }
