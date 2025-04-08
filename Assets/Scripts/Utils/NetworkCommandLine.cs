@@ -45,6 +45,7 @@ public class NetworkCommandLine : MonoBehaviour
         {
             FindObjectsByType<MapManager>(FindObjectsSortMode.None).ToList().ForEach(manager =>
             {
+                manager.ClearMap();
                 manager.LoadMap(map);
             });
         }
