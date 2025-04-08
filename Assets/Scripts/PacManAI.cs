@@ -69,8 +69,6 @@ namespace PacMan
             Vector3Int startCell3D = _obstacleMap.WorldToCell(transform.position);
             startCell = new Vector2Int(startCell3D.x, startCell3D.z);
             oldCell = startCell;
-            Debug.Log("start: " + startCell);
-
 
             //_veronoiMap = new VeronoiMap();
             //_veronoiMap.GenerateMap(_obstacleMap, allAgentPositions);             
@@ -119,12 +117,13 @@ namespace PacMan
                 }
             }
 
+            // Replan if you got eaten and you respawn
             Vector3Int currentCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int currentCell = new Vector2Int(currentCell3D.x, currentCell3D.z);
             if (currentCell == startCell && Vector2Int.Distance(currentCell, oldCell) > 1)
             {
                 respawned = true;
-                Debug.Log(Vector2Int.Distance(currentCell, oldCell));
+                Debug.Log("respawned");
                 GenerateWaypoints(path[^1]);
             }
             else respawned = false;
@@ -132,7 +131,7 @@ namespace PacMan
 
             AssignDefense(); // TO DO : Move to pre-planning
 
-            if (isDefense && isBlue)
+            if (isDefense /*&& isBlue*/)
             {
                 if (pacManIndex == 0) // First agent updates assignment once per tick
                 {
@@ -176,11 +175,11 @@ namespace PacMan
                 }
             }
 
-            else if (isDefense && !isBlue)
+            /*else if (isDefense && !isBlue)
             {
                 if (waypoints == null) GoToDefensePosition();
                 else ContinuePatrol();
-            }
+            }*/
 
             //Attacking
             else
