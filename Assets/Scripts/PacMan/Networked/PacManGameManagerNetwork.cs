@@ -9,6 +9,8 @@ namespace PacMan
 {
     public class PacManGameManagerNetwork : PacManGameManager
     {
+        public float planningTime = 10f;
+
         public override void Start()
         {
         }

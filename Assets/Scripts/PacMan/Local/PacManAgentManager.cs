@@ -40,7 +40,7 @@ namespace PacMan.Local
             ghostObject = transform.Find("visuals/ghost").gameObject;
             pacManObject = transform.Find("visuals/pacman").gameObject;
 
-            pacManAI.Initialize(_pacManGameManager.mapManager);
+            pacManAI.Initialize(_pacManGameManager.mapManager, Time.time + 30f);
             _ready = true;
         }
 
