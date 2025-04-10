@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using PacMan.PacMan;
 using Scripts.Map;
+using Scripts.Utils;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -38,6 +39,9 @@ namespace PacMan
 
         private PacManObservations _latestKnownObservations;
         private bool initialized;
+        private bool initializedAI;
+        private int expectedNrOfFriendlyAgents = -1; 
+        private int expectedNrOfEnemyAgents = -1; 
 
         public void OnTransformParentChanged()
         {
@@ -60,34 +64,26 @@ namespace PacMan
             base.OnNetworkDespawn();
         }
 
-        public virtual void Initialize()
+        public virtual void LazyInitialize()
         {
             _movement = GetComponent<PacManMovementController>();
             pacManAI = GetComponent<PacManAI>();
 
             ghostObject = transform.Find("visuals/ghost").gameObject;
             pacManObject = transform.Find("visuals/pacman").gameObject;
+
+            globalStartPosition = syncposition.Value;
+            tag = synctag.Value.ToString();
+
+            expectedNrOfFriendlyAgents = _pacManGameManager.mapManager.transform.FindAllChildrenWithTag("Start").FindAll(obj => TeamAssignmentUtil.CheckTeam(obj) == TeamAssignmentUtil.CheckTeam(gameObject)).Count;
+            expectedNrOfEnemyAgents = _pacManGameManager.mapManager.transform.FindAllChildrenWithTag("Start").FindAll(obj => TeamAssignmentUtil.CheckTeam(obj) != TeamAssignmentUtil.CheckTeam(gameObject)).Count;
+            initialized = true;
         }
 
         public void NetworkTick()
         {
             if (synctag.Value.IsEmpty) return;
-
-            if (!initialized && _pacManGameManager.agents.Count > 0)
-            {
-                Initialize();
-                if (IsOwner)
-                {
-                    pacManAI.Initialize(_pacManGameManager.mapManager);
-                }
-
-                initialized = true;
-            }
-
-            if (!initialized) return;
-
-            globalStartPosition = syncposition.Value;
-            tag = synctag.Value.ToString();
+            if (!initialized) LazyInitialize();
 
             ghostObject.SetActive(isGhost.Value);
             pacManObject.SetActive(!isGhost.Value);
@@ -129,18 +125,34 @@ namespace PacMan
             //When reading this, keep in mind that NetworkBehaviors are executed on each instance of the game in parallel.
             if (IsOwner)
             {
-                var action = pacManAI.Tick(); // Calculate new action
-                if (NetworkManager.IsServer)
+                if (!initializedAI && AllValuesSynced())
                 {
-                    m_action = action; // If owned by server (host mode) store action directly.
+                    pacManAI.Initialize(_pacManGameManager.mapManager);
+                    initializedAI = true;
+                    return; //Return, because if we chose to plan, we need a new tick to get an updated state.
                 }
-                else
+
+                if (initializedAI)
                 {
-                    UpdateServerSideActionServerRpc(action); // Send latest known action to server. Will be applied by the server.
+                    var action = pacManAI.Tick(); // Calculate new action
+                    if (NetworkManager.IsServer)
+                    {
+                        m_action = action; // If owned by server (host mode) store action directly.
+                    }
+                    else
+                    {
+                        UpdateServerSideActionServerRpc(action); // Send latest known action to server. Will be applied by the server.
+                    }
                 }
             }
         }
 
+        private bool AllValuesSynced()
+        {
+            return !synctag.Value.IsEmpty &&
+                   _latestKnownObservations.Observations != null &&
+                   GetFriendlyAgents().Count == expectedNrOfFriendlyAgents;
+        }
         private PacManObservations ProducePacManObservations(ulong clientId)
         {
             var pacManObservations = new PacManObservations();
@@ -310,9 +322,9 @@ namespace PacMan
         public List<IPacManAgent> GetFriendlyAgents()
         {
             return _pacManGameManager.agents
-                .Select(agent => agent.GetComponent<IPacManAgent>())
-                .ToList()
-                .FindAll(obj => obj.CompareTag(tag));
+                .Select(agent => agent.GetComponent<PacManAgentManagerNetwork>()).ToList()
+                .FindAll(obj => obj.CompareTag(tag) && OwnerClientId == obj.OwnerClientId)
+                .Select(agent => agent.GetComponent<IPacManAgent>()).ToList();
         }
 
         public List<IPacManAgent> GetVisibleEnemyAgents()
