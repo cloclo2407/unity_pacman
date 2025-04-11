@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using PacMan.PacMan;
 using Scripts.Map;
-using UnityEditor.TextCore.Text;
+//using UnityEditor.TextCore.Text;
 using UnityEngine;
 
 namespace PacMan
