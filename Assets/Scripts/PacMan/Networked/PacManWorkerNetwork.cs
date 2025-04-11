@@ -28,6 +28,7 @@ namespace PacMan
             agent.name = prefab.name;
             agent.transform.position = position + prefab.transform.position;
 
+            networkObject.SpawnWithObservers = false;
             networkObject.Spawn();
 
             manager.synctag.Value = team_tag;
