@@ -17,7 +17,7 @@ GameObject:
   - component: {fileID: -4687693382850069095}
   m_Layer: 7
   m_Name: PacManAgent
-  m_TagString: Untagged
+  m_TagString: Red
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -115,6 +115,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd3a6e6cdc78446d81ab62251cce6700, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pacManIndex: 0
+  lastFoodLossTime: -100
 --- !u!114 &6052309846596243798
 MonoBehaviour:
   m_ObjectHideFlags: 0
