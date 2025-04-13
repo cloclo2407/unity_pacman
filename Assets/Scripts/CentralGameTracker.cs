@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using PacMan;
 using PacMan.PacMan;
 using Scripts.Map;
-//using UnityEditor.UI;
 using UnityEngine;
 using System.Linq;
 
@@ -88,10 +87,11 @@ public static class CentralGameTracker
         // Convert current food to cell positions
         currentFoodCells = new HashSet<Vector3Int>(newFoodPositions.Select(f => obstacleMap.WorldToCell(f.transform.position)));
 
-        // Check for loss only if food count changed
-        if (currentFoodCells.Count != previousFoodCells.Count)
+        // Detect any difference between previous and current food cells
+        bool foodChanged = !currentFoodCells.SetEquals(previousFoodCells);
+
+        if (foodChanged)
         {
-            // Update clusters and food cache
             foodPositions = newFoodPositions;
             updateFood();
         }
@@ -284,7 +284,7 @@ public static class CentralGameTracker
             i++;
         }
 
-        // 3. Noisy enemies
+        /*// 3. Noisy enemies
         foreach (var obs in defenders[0].GetEnemyObservations().Observations)
         {
             if (obs.Position.sqrMagnitude > 0.01f && IsOnMySide(obs.Position, isBlue))
@@ -303,7 +303,7 @@ public static class CentralGameTracker
                 TargetPosition = guess
             };
             i++;
-        }
+        }*/
 
         // 4. Lost food?
         Vector3Int? lostFood = CheckForFoodLoss(isBlue);

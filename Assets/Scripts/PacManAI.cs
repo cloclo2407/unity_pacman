@@ -415,15 +415,18 @@ namespace PacMan
                 if (friendlyAgents[i] == _agentAgentManager)
                 {
                     pacManIndex = i;
-                    if (i < agentCount - attackers)
+
+                    // First few are attackers now
+                    if (i < attackers)
                     {
-                        myDefensePosition = defensePositions[i];
+                        isDefense = false;
                     }
                     else
                     {
-                        isDefense = false;
-                    }                    
-                }               
+                        int defenseIndex = i - attackers;
+                        myDefensePosition = defensePositions[defenseIndex];
+                    }
+                }
             }
         }
 
@@ -431,6 +434,7 @@ namespace PacMan
         {
             Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+            if (respawned) currentWaypointIndex = 0;
 
             if (path.Count > 1 && path[0] == myCell && path[path.Count - 1] == destination) return;
 
