@@ -26,10 +26,13 @@ public static class CentralGameTracker
 
     private static Dictionary<int, DefenseAssignment> agentDefenseStates = new(); // PacmanIndex -> Assignment
 
+    private static List<IPacManAgent> defenders;
+
     public static void Initialize(IPacManAgent _agentAgentManager, ObstacleMap _obstacleMap)
     {
         if (_initialized) return;
         _nrFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
+        defenders = _agentAgentManager.GetFriendlyAgents();
         _nrAgents = 2 * _nrFriendlyAgents;
         agentAgentManager = _agentAgentManager;
         obstacleMap = _obstacleMap;
@@ -77,7 +80,7 @@ public static class CentralGameTracker
     }
 
     /*
-     * Checks if the length of the food vector has changed
+     * Checks if the food vector has changed
      * If it has recalculates the flood clusters
      */
     public static void checkFood()
@@ -249,17 +252,17 @@ public static class CentralGameTracker
         return isBlue ? pos.x < 0 : pos.x >= 0;
     }
 
-    public static void UpdateDefenseAssignments(List<IPacManAgent> defenders, bool isBlue)
+    public static void UpdateDefenseAssignments(bool isBlue)
     {
-        agentDefenseStates.Clear();
+        //agentDefenseStates.Clear();
 
         List<(GameObject intruder, Vector3 position)> visible = new();
         List<Vector3> noisy = new();
 
         // 1. Find visible intruders on your side
-        foreach (var agent in defenders)
+        //foreach (var agent in defenders)
         {
-            foreach (var enemy in agent.GetVisibleEnemyAgents())
+            foreach (var enemy in defenders[0].GetVisibleEnemyAgents())
             {
                 if (IsOnMySide(enemy.gameObject.transform.position, isBlue))
                 {
@@ -269,18 +272,19 @@ public static class CentralGameTracker
         }
 
         // 2. Assign one defender per visible intruder
-        int i = 0;
+        int i = PacManAI.attackers;
         foreach (var v in visible)
         {
             if (i >= defenders.Count) break;
             var defender = defenders[i];
             var pacIndex = defenders.IndexOf(defender);
+            Debug.Log(i + " is Chasing");
             agentDefenseStates[pacIndex] = new DefenseAssignment
             {
                 State = DefenseState.Chase,
                 TargetPosition = v.position,
                 TargetIntruder = v.intruder
-            };
+            };                
             i++;
         }
 
@@ -306,7 +310,7 @@ public static class CentralGameTracker
         }*/
 
         // 4. Lost food?
-        Vector3Int? lostFood = CheckForFoodLoss(isBlue);
+        /*Vector3Int? lostFood = CheckForFoodLoss(isBlue);
         if (lostFood != null)
         {
             Vector3 worldLost = obstacleMap.CellToWorld(lostFood.Value);
@@ -320,16 +324,25 @@ public static class CentralGameTracker
                 };
                 i++;
             }
-        }
+        }*/
 
         // 5. Remaining defenders patrol/idle
         for (; i < defenders.Count; i++)
         {
             var pacIndex = defenders.IndexOf(defenders[i]);
-            agentDefenseStates[pacIndex] = new DefenseAssignment
+
+            // If already in the dictionary and in Patrol state, keep it
+            if (agentDefenseStates.TryGetValue(pacIndex, out var assignment) && assignment.State == DefenseState.Patrol)
             {
-                State = DefenseState.Idle
-            };
+                continue;
+            }
+            else {
+                Debug.Log(i + " is Patrolling");
+                agentDefenseStates[pacIndex] = new DefenseAssignment
+                {                  
+                    State = DefenseState.Idle
+                };
+            }
         }
     }
 
@@ -340,6 +353,13 @@ public static class CentralGameTracker
 
         return new DefenseAssignment { State = DefenseState.Idle };
     }
+
+    public static void SetDefenseAssignment(IPacManAgent pacman, DefenseState assignment)
+    {
+        int pacManIndex = agentAgentManager.GetFriendlyAgents().IndexOf(pacman);
+        agentDefenseStates[pacManIndex] = new DefenseAssignment { State = assignment};
+    }
+
     public enum DefenseState
     {
         Idle,

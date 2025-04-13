@@ -14,7 +14,7 @@ namespace PacMan
         private MapManager _mapManager;
 
         //General Info
-        int pacManIndex = 0;
+        public int pacManIndex = 0;
         private bool isBlue;
         private int nrOfFriendlyAgents;
         private List<Vector3> allAgentPositions;
@@ -32,6 +32,9 @@ namespace PacMan
         private float suspiciousCooldown = 5f;
         public float lastFoodLossTime = -100f;
         private CentralGameTracker.DefenseState currentDefenseState = CentralGameTracker.DefenseState.Idle;
+
+        //Attack
+        public static int attackers = 1; // Number of attackers in the team
 
         //Pd tracker
         private float k_p = 2;
@@ -123,7 +126,6 @@ namespace PacMan
             if (currentCell == startCell && Vector2Int.Distance(currentCell, oldCell) > 1)
             {
                 respawned = true;
-                Debug.Log("respawned");
                 GenerateWaypoints(path[^1]);
             }
             else respawned = false;
@@ -131,13 +133,13 @@ namespace PacMan
 
             AssignDefense(); // TO DO : Move to pre-planning
 
-            if (isDefense /*&& isBlue*/)
+            if (pacManIndex == 0) // First agent updates assignment once per tick
             {
-                if (pacManIndex == 0) // First agent updates assignment once per tick
-                {
-                    CentralGameTracker.UpdateDefenseAssignments(_agentAgentManager.GetFriendlyAgents(), isBlue);
-                }
+                CentralGameTracker.UpdateDefenseAssignments(isBlue);
+            }
 
+            if (isDefense)
+            {                
                 var assignment = CentralGameTracker.GetDefenseAssignment(pacManIndex);
 
                 switch (assignment.State)
@@ -146,7 +148,11 @@ namespace PacMan
                         Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
                         Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
                         if (myCell != myDefensePosition) GoToDefensePosition();
-                        else ContinuePatrol();
+                        else
+                        {
+                            CentralGameTracker.SetDefenseAssignment(_agentAgentManager, CentralGameTracker.DefenseState.Patrol);
+                            ContinuePatrol();
+                        }
                         break;
 
                     case CentralGameTracker.DefenseState.Patrol:
@@ -174,12 +180,6 @@ namespace PacMan
                         break;
                 }
             }
-
-            /*else if (isDefense && !isBlue)
-            {
-                if (waypoints == null) GoToDefensePosition();
-                else ContinuePatrol();
-            }*/
 
             //Attacking
             else
@@ -316,6 +316,7 @@ namespace PacMan
             //DrawFood();
             //Gizmos.color = Color.green;
             DrawCurrentWaypoint();  
+            if (isDefense && isBlue)
             DrawWaypoints();
             
         }
@@ -399,8 +400,6 @@ namespace PacMan
 
             if (agentCount == 0)
                 return;
-
-            int attackers; //nb of pacman who attack
             if (agentCount <= 3) attackers = 1;
             else attackers = 2;
             
@@ -488,61 +487,6 @@ namespace PacMan
             GenerateWaypointsCluster(target, closestFoodCluster);
         }
 
-        private void UpdateDefenseState()
-        {
-            visibleIntruder = null;
-            noisyIntruderGuess = null;
-
-            // 1. Check visible enemies // TO DO : Modify for only one going there 
-            foreach (var enemy in _agentAgentManager.GetVisibleEnemyAgents())
-            {
-                if (CentralGameTracker.IsOnMySide(enemy.gameObject.transform.position, isBlue))
-                {
-                    visibleIntruder = enemy.gameObject;
-                    currentDefenseState = CentralGameTracker.DefenseState.Chase;
-                    return;
-                }
-            }
-
-            // 2. Noisy enemies (fast-moving ghosts) // TO DO : Modify for only one going there
-            foreach (var obs in _agentAgentManager.GetEnemyObservations().Observations)
-            {
-                if (obs.Position.sqrMagnitude > 0.01f && CentralGameTracker.IsOnMySide(obs.Position, isBlue))
-                {
-                    noisyIntruderGuess = obs.Position;
-                    currentDefenseState = CentralGameTracker.DefenseState.Investigate;
-                    return;
-                }
-            }
-
-            // 3. Food disappeared?
-            var lostFood = CentralGameTracker.CheckForFoodLoss(isBlue);
-            if (lostFood != null)
-            {
-                if (CentralGameTracker.IsOnMySide(_obstacleMap.CellToWorld(lostFood.Value), isBlue))
-                {
-                    lastStolenFoodPos = _obstacleMap.CellToWorld(lostFood.Value);
-                    lastFoodLossTime = Time.time;
-                    currentDefenseState = CentralGameTracker.DefenseState.Investigate;
-                    return;
-                }
-            }
-
-            // 4. If previously investigating and timeout expired
-            if (currentDefenseState == CentralGameTracker.DefenseState.Investigate && Time.time - lastFoodLossTime > suspiciousCooldown)
-            {
-                currentDefenseState = CentralGameTracker.DefenseState.Return;
-            }
-
-            // 5. If back at my defense position
-            Vector3Int myPosition3D = _obstacleMap.WorldToCell(transform.position);
-            Vector2Int myPosition = new Vector2Int(myPosition3D.x, myPosition3D.z);
-            if (currentDefenseState == CentralGameTracker.DefenseState.Return &&  myPosition == myDefensePosition)
-            {
-                currentDefenseState = CentralGameTracker.DefenseState.Idle;
-            }
-        }
-
         private void GoToDefensePosition()
         {
             GenerateWaypoints(myDefensePosition);
@@ -565,7 +509,7 @@ namespace PacMan
         {
             if (reachedDestination)
             {
-                currentDefenseState = CentralGameTracker.DefenseState.Idle;
+                PatrolAroundDefensePosition();
             }
         }
 
