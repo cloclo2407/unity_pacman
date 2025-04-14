@@ -35,7 +35,7 @@ namespace PacMan
         public Vector3? lastStolenFoodPos;
         private float suspiciousCooldown = 5f;
         public float lastFoodLossTime = -100f;
-        private CentralGameTracker.DefenseState currentDefenseState = CentralGameTracker.DefenseState.Idle;
+        private CentralGameTrackerBlue.DefenseState currentDefenseState = CentralGameTrackerBlue.DefenseState.Idle;
         private bool defenseAssigned = false;
 
         //Attack
@@ -81,10 +81,11 @@ namespace PacMan
         {
             if (!initialized)
             {
-                initialized = true;
-                CentralGameTracker.Initialize(_agentAgentManager, _obstacleMap);
+                initialized = true;               
 
                 isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
+                if (isBlue) CentralGameTrackerBlue.Initialize(_agentAgentManager, _obstacleMap);
+                else CentralGameTrackerRed.Initialize(_agentAgentManager, _obstacleMap);
 
                 nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
 
@@ -156,32 +157,42 @@ namespace PacMan
 
             if (pacManIndex == 0) // First agent updates assignment once per tick
             {
-                CentralGameTracker.UpdateDefenseAssignments(isBlue);
-                CentralGameTracker.checkFood();
+                if (isBlue)
+                {
+                    CentralGameTrackerBlue.UpdateDefenseAssignments();
+                    CentralGameTrackerBlue.checkFood();
+                }
+                else
+                {
+                    CentralGameTrackerRed.UpdateDefenseAssignments();
+                    CentralGameTrackerRed.checkFood();
+                }
             }
 
             if (isDefense)
-            {                
-                var assignment = CentralGameTracker.GetDefenseAssignment(pacManIndex);
+            {
+                CentralGameTrackerBlue.DefenseAssignment assignment;
+                if (isBlue) assignment = CentralGameTrackerBlue.GetDefenseAssignment(pacManIndex);
+                else assignment = CentralGameTrackerRed.GetDefenseAssignment(pacManIndex);
 
                 switch (assignment.State)
                 {
-                    case CentralGameTracker.DefenseState.Idle:
+                    case CentralGameTrackerBlue.DefenseState.Idle:
                         Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
                         Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
                         if (myCell != myDefensePosition) GoToDefensePosition();
                         else
                         {
-                            CentralGameTracker.SetDefenseAssignment(_agentAgentManager, CentralGameTracker.DefenseState.Patrol);
+                            CentralGameTrackerBlue.SetDefenseAssignment(_agentAgentManager, CentralGameTrackerBlue.DefenseState.Patrol);
                             ContinuePatrol();
                         }
                         break;
 
-                    case CentralGameTracker.DefenseState.Patrol:
+                    case CentralGameTrackerBlue.DefenseState.Patrol:
                         ContinuePatrol();
                         break;
 
-                    case CentralGameTracker.DefenseState.Chase:
+                    case CentralGameTrackerBlue.DefenseState.Chase:
                         if (assignment.TargetIntruder != null)
                         {
                             Vector3Int position3D = _obstacleMap.WorldToCell(assignment.TargetIntruder.transform.position);
@@ -189,7 +200,7 @@ namespace PacMan
                         }
                         break;
 
-                    case CentralGameTracker.DefenseState.Investigate:
+                    case CentralGameTrackerBlue.DefenseState.Investigate:
                         if (assignment.TargetPosition.HasValue)
                         {
                             Vector3Int cell = _obstacleMap.WorldToCell(assignment.TargetPosition.Value);
@@ -197,7 +208,7 @@ namespace PacMan
                         }
                         break;
 
-                    case CentralGameTracker.DefenseState.Return:
+                    case CentralGameTrackerBlue.DefenseState.Return:
                         GoToDefensePosition();
                         break;
                 }
@@ -395,7 +406,7 @@ namespace PacMan
         {
             Gizmos.color = Color.red;
 
-            foreach (var food in CentralGameTracker.positiveClusters)
+            foreach (var food in CentralGameTrackerBlue.foodClusters)
             {
                 Vector3Int pos = food[0];
                 Vector3 worldPos = _obstacleMap.CellToWorld(pos) + _obstacleMap.trueScale / 2;
@@ -404,7 +415,7 @@ namespace PacMan
 
             Gizmos.color = Color.blue;
 
-            foreach (var food in CentralGameTracker.negativeClusters)
+            foreach (var food in CentralGameTrackerRed.foodClusters)
             {
                 Vector3Int pos = food[0];
                 Vector3 worldPos = _obstacleMap.CellToWorld(pos) + _obstacleMap.trueScale / 2;
@@ -500,8 +511,11 @@ namespace PacMan
         }
         
         private void GoGetFood()
-        { 
-            var (closestFood, closestFoodCluster) = CentralGameTracker.FindFurthestAvailableCluster(transform.position, isBlue);
+        {
+            Vector3Int closestFood;
+            List<Vector3Int> closestFoodCluster;
+            if (isBlue) (closestFood, closestFoodCluster) = CentralGameTrackerBlue.FindFurthestAvailableCluster(transform.position);
+            else (closestFood, closestFoodCluster) = CentralGameTrackerRed.FindFurthestAvailableCluster(transform.position);
             Vector2Int target = new Vector2Int(closestFood.x, closestFood.z);
             GenerateWaypointsCluster(target, closestFoodCluster);
         }
@@ -520,7 +534,7 @@ namespace PacMan
                 Vector2Int patrolTarget = (UnityEngine.Random.value > 0.5f) ? myDefensePosition + offset : myDefensePosition - offset;
 
                 GenerateWaypoints(patrolTarget);
-                currentDefenseState = CentralGameTracker.DefenseState.Patrol;
+                currentDefenseState = CentralGameTrackerBlue.DefenseState.Patrol;
             }
         }
 
@@ -536,7 +550,7 @@ namespace PacMan
         {
             if (visibleIntruder == null)
             {
-                currentDefenseState = CentralGameTracker.DefenseState.Return;
+                currentDefenseState = CentralGameTrackerBlue.DefenseState.Return;
                 return;
             }
 

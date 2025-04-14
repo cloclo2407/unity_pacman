@@ -5,7 +5,7 @@ using Scripts.Map;
 using UnityEngine;
 using System.Linq;
 
-public static class CentralGameTracker
+public static class CentralGameTrackerRed
 {
     
     private static bool _initialized = false;
@@ -21,13 +21,14 @@ public static class CentralGameTracker
     private static HashSet<Vector3Int> previousFoodCells = new HashSet<Vector3Int>();
     private static HashSet<Vector3Int> currentFoodCells = new HashSet<Vector3Int>();
     
-    public static List<List<Vector3Int>> positiveClusters;
-    public static List<List<Vector3Int>> negativeClusters;
+    public static List<List<Vector3Int>> foodClusters;
     private static HashSet<List<Vector3Int>> claimedClusters = new HashSet<List<Vector3Int>>(new ClusterComparer());
 
-    private static Dictionary<int, DefenseAssignment> agentDefenseStates = new(); // PacmanIndex -> Assignment
+    private static Dictionary<int, CentralGameTrackerBlue.DefenseAssignment> agentDefenseStates = new(); // PacmanIndex -> Assignment
 
     private static List<IPacManAgent> defenders;
+
+    public static bool isBlue = false;
 
     public static void Initialize(IPacManAgent _agentAgentManager, ObstacleMap _obstacleMap)
     {
@@ -40,44 +41,6 @@ public static class CentralGameTracker
         checkFood();
 
         _initialized = true;
-    }
-
-    
-    public static void updatePositions(List<IPacManAgent> friendlyAgents, PacManObservations enemyObservations)
-    {
-        var newPositions = new List<Vector3>(_nrAgents);
-        
-        
-        for (int i = 0; i < _nrFriendlyAgents; i++)
-        {
-            newPositions[i] = friendlyAgents[i].gameObject.transform.position;
-        }
-        
-        for (int i = 0; i < _nrFriendlyAgents; i++)
-        {
-            var observation = enemyObservations.Observations[i];
-            
-            if (observation.Visible)
-            {
-                newPositions[i + _nrFriendlyAgents] = observation.Position;
-            }
-            else
-            {
-                newPositions[i + _nrFriendlyAgents] = Vector3.zero;
-            }
-            
-        }
-        
-        for (int i = _nrFriendlyAgents; i < _nrAgents; i++)
-        {
-            if (newPositions[i] == Vector3.zero)
-            {
-                
-            }
-            
-        }
-        agentPositions = newPositions;
-                      
     }
 
     /*
@@ -104,7 +67,6 @@ public static class CentralGameTracker
         previousFoodCells = new HashSet<Vector3Int>(currentFoodCells);
     }
 
-
     /*
      * Creates the food clusters from the list of food
      * A cluster contains food that are on adjacent positions
@@ -113,8 +75,7 @@ public static class CentralGameTracker
      */
     private static void updateFood()
     {
-        positiveClusters = new List<List<Vector3Int>>();
-        negativeClusters = new List<List<Vector3Int>>();
+        foodClusters = new List<List<Vector3Int>>();
 
         HashSet<Vector3Int> visited = new HashSet<Vector3Int>();
 
@@ -122,7 +83,7 @@ public static class CentralGameTracker
         {
             Vector3Int position = obstacleMap.WorldToCell(food.transform.position);
 
-            if (!visited.Contains(position) )
+            if (!visited.Contains(position) && position.x < 0)
             {
                 List<Vector3Int> cluster = new List<Vector3Int>();
                 Queue<Vector3Int> queue = new Queue<Vector3Int>();
@@ -135,33 +96,19 @@ public static class CentralGameTracker
                     Vector3Int current = queue.Dequeue();
                     cluster.Add(current);
                     foreach (Vector3Int neighbor in GetAdjacentCells(current))
-                    {   
+                    {
                         if (!visited.Contains(neighbor) && foodPositions.Any(f => obstacleMap.WorldToCell(f.transform.position) == neighbor))
                         {
                             queue.Enqueue(neighbor);
                             visited.Add(neighbor);
-                          
                         }
                     }
                 }
-
-                // Add cluster to corresponding list
-                if (position.x >= 0)
-                {
-                    positiveClusters.Add(cluster);
-                }
-                else
-                {
-                    negativeClusters.Add(cluster);
-                }
+                foodClusters.Add(cluster);
             }
         }
-
         // Sort clusters by their furthest x distance from x = 0
-        positiveClusters.Sort((a, b)=>CompareClusters(a, b));
-        negativeClusters.Sort((a, b)=>CompareClusters(b, a)); // Reversed for x < 0
-
-        // Store or use these sorted cluster lists as needed
+        foodClusters.Sort((a, b) => CompareClusters(b, a)); // Reversed for x < 0
     }
 
     /*
@@ -190,11 +137,9 @@ public static class CentralGameTracker
         return maxXB.CompareTo(maxXA);
     }
 
-    public static (Vector3Int, List<Vector3Int>) FindFurthestAvailableCluster(Vector3 startPos, bool isBlue)
+    public static (Vector3Int, List<Vector3Int>) FindFurthestAvailableCluster(Vector3 startPos)
     {
-        List<List<Vector3Int>> clusters = isBlue ? positiveClusters : negativeClusters;
-
-        foreach (var cluster in clusters)
+        foreach (var cluster in foodClusters)
         {
             if (claimedClusters.Contains(cluster)) continue;
 
@@ -218,24 +163,21 @@ public static class CentralGameTracker
 
         foreach (var cell in lost)
         {
-            if (IsOnMySide(cell, isBlue))
+            if (IsOnMySide(cell))
             {
                 return cell;
             }
         }
-
         return null;
     }
 
-    public static bool IsOnMySide(Vector3 pos, bool isBlue)
+    public static bool IsOnMySide(Vector3 pos)
     {
         return isBlue ? pos.x < 0 : pos.x >= 0;
     }
 
-    public static void UpdateDefenseAssignments(bool isBlue)
+    public static void UpdateDefenseAssignments()
     {
-        //agentDefenseStates.Clear();
-
         List<(GameObject intruder, Vector3 position)> visible = new();
         List<Vector3> noisy = new();
 
@@ -244,7 +186,7 @@ public static class CentralGameTracker
         {
             foreach (var enemy in defenders[0].GetVisibleEnemyAgents())
             {
-                if (IsOnMySide(enemy.gameObject.transform.position, isBlue))
+                if (IsOnMySide(enemy.gameObject.transform.position))
                 {
                     visible.Add((enemy.gameObject, enemy.gameObject.transform.position));
                 }
@@ -258,35 +200,14 @@ public static class CentralGameTracker
             if (i >= defenders.Count) break;
             var defender = defenders[i];
             var pacIndex = defenders.IndexOf(defender);
-            agentDefenseStates[pacIndex] = new DefenseAssignment
+            agentDefenseStates[pacIndex] = new CentralGameTrackerBlue.DefenseAssignment
             {
-                State = DefenseState.Chase,
+                State = CentralGameTrackerBlue.DefenseState.Chase,
                 TargetPosition = v.position,
                 TargetIntruder = v.intruder
             };                
             i++;
         }
-
-        /*// 3. Noisy enemies
-        foreach (var obs in defenders[0].GetEnemyObservations().Observations)
-        {
-            if (obs.Position.sqrMagnitude > 0.01f && IsOnMySide(obs.Position, isBlue))
-            {
-                noisy.Add(obs.Position);
-            }
-        }
-        
-        foreach (var guess in noisy)
-        {
-            if (i >= defenders.Count) break;
-            var pacIndex = defenders.IndexOf(defenders[i]);
-            agentDefenseStates[pacIndex] = new DefenseAssignment
-            {
-                State = DefenseState.Investigate,
-                TargetPosition = guess
-            };
-            i++;
-        }*/
 
         // 4. Lost food?
         /*Vector3Int? lostFood = CheckForFoodLoss(isBlue);
@@ -311,67 +232,32 @@ public static class CentralGameTracker
             var pacIndex = defenders.IndexOf(defenders[i]);
 
             // If already in the dictionary and in Patrol state, keep it
-            if (agentDefenseStates.TryGetValue(pacIndex, out var assignment) && assignment.State == DefenseState.Patrol)
+            if (agentDefenseStates.TryGetValue(pacIndex, out var assignment) && assignment.State == CentralGameTrackerBlue.DefenseState.Patrol)
             {
                 continue;
             }
             else {
-                agentDefenseStates[pacIndex] = new DefenseAssignment
+                agentDefenseStates[pacIndex] = new CentralGameTrackerBlue.DefenseAssignment
                 {                  
-                    State = DefenseState.Idle
+                    State = CentralGameTrackerBlue.DefenseState.Idle
                 };
             }
         }
     }
 
-    public static DefenseAssignment GetDefenseAssignment(int pacManIndex)
+    public static CentralGameTrackerBlue.DefenseAssignment GetDefenseAssignment(int pacManIndex)
     {
         if (agentDefenseStates.TryGetValue(pacManIndex, out var assignment))
             return assignment;
 
-        return new DefenseAssignment { State = DefenseState.Idle };
+        return new CentralGameTrackerBlue.DefenseAssignment { State = CentralGameTrackerBlue.DefenseState.Idle };
     }
 
-    public static void SetDefenseAssignment(IPacManAgent pacman, DefenseState assignment)
+    public static void SetDefenseAssignment(IPacManAgent pacman, CentralGameTrackerBlue.DefenseState assignment)
     {
         int pacManIndex = agentAgentManager.GetFriendlyAgents().IndexOf(pacman);
-        agentDefenseStates[pacManIndex] = new DefenseAssignment { State = assignment};
-    }
-
-    public enum DefenseState
-    {
-        Idle,
-        Patrol,
-        Chase,
-        Investigate,
-        Return
-    }
-
-    public struct DefenseAssignment
-    {
-        public DefenseState State;
-        public Vector3? TargetPosition;
-        public GameObject TargetIntruder;
+        agentDefenseStates[pacManIndex] = new CentralGameTrackerBlue.DefenseAssignment { State = assignment};
     }
 }
 
-class ClusterComparer : IEqualityComparer<List<Vector3Int>>
-{
-    public bool Equals(List<Vector3Int> x, List<Vector3Int> y)
-    {
-        if (x == null || y == null) return false;
-        if (x.Count != y.Count) return false;
-        return !x.Except(y).Any(); // Consider equal if all elements match
-    }
-
-    public int GetHashCode(List<Vector3Int> obj)
-    {
-        int hash = 17;
-        foreach (var v in obj.OrderBy(v => v.x * 73856093 ^ v.y * 19349663 ^ v.z * 83492791))
-        {
-            hash = hash * 31 + v.GetHashCode();
-        }
-        return hash;
-    }
-}
 
