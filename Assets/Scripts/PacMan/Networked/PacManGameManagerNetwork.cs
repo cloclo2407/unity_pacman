@@ -32,11 +32,14 @@ namespace PacMan
             {
                 NetworkManager.Singleton.NetworkTickSystem.Tick += NetworkTick;
                 started = true;
-                mapManager.GetObstacleObjects().ForEach(obj =>
+                if (!NetworkManager.Singleton.IsHost)
                 {
-                    var component = obj.GetComponent<Collider>();
-                    if (component != null) component.isTrigger = true;
-                });
+                    mapManager.GetObstacleObjects().ForEach(obj =>
+                    {
+                        var component = obj.GetComponent<Collider>();
+                        if (component != null) component.isTrigger = true;
+                    }); 
+                }
             }
         }
 
