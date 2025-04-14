@@ -23,6 +23,7 @@ public static class CentralGameTracker
     
     public static List<List<Vector3Int>> positiveClusters;
     public static List<List<Vector3Int>> negativeClusters;
+    private static HashSet<List<Vector3Int>> claimedClusters = new HashSet<List<Vector3Int>>(new ClusterComparer());
 
     private static Dictionary<int, DefenseAssignment> agentDefenseStates = new(); // PacmanIndex -> Assignment
 
@@ -189,45 +190,24 @@ public static class CentralGameTracker
         return maxXB.CompareTo(maxXA);
     }
 
-    public static (Vector3Int, List<Vector3Int>) FindClosestFoodCluster(Vector3 startPos, bool isBlue)
-    {            
-        List<Vector3Int> closestCluster = new List<Vector3Int>();
-        Vector3Int closestFood = new Vector3Int();
+    public static (Vector3Int, List<Vector3Int>) FindFurthestAvailableCluster(Vector3 startPos, bool isBlue)
+    {
+        List<List<Vector3Int>> clusters = isBlue ? positiveClusters : negativeClusters;
 
-        if (isBlue)
+        foreach (var cluster in clusters)
         {
-            var closestDistance = float.MaxValue;
-            foreach (var cluster in positiveClusters)
-            {
-                foreach (var pos in cluster)
-                {
-                    if ((pos - startPos).magnitude < closestDistance)
-                    {
-                        closestCluster = cluster;
-                        closestFood = pos;
-                        closestDistance = (pos - startPos).magnitude;
-                    }                   
-                }           
-            }
-        }
-        else
-        {
-            var closestDistance = float.MaxValue;
-            foreach (var cluster in negativeClusters)
-            {
-                foreach (var pos in cluster)
-                {   
-                    if ((pos - startPos).magnitude < closestDistance)
-                    {
-                        closestCluster = cluster;
-                        closestFood = pos;
-                        closestDistance = (pos - startPos).magnitude;
-                    }
-                }
-            }
+            if (claimedClusters.Contains(cluster)) continue;
+
+            // Mark this cluster as claimed so others don't pick it
+            claimedClusters.Add(cluster);
+
+            // Choose the food in the cluster closest to current position (as entry point)
+            Vector3Int targetFood = cluster.OrderBy(pos => (pos - obstacleMap.WorldToCell(startPos)).sqrMagnitude).First();
+            return (targetFood, cluster);
         }
 
-        return (closestFood, closestCluster);
+        // No unclaimed cluster found
+        return (Vector3Int.zero, null);
     }
 
     public static Vector3Int? CheckForFoodLoss(bool isBlue)
@@ -372,6 +352,26 @@ public static class CentralGameTracker
         public DefenseState State;
         public Vector3? TargetPosition;
         public GameObject TargetIntruder;
+    }
+}
+
+class ClusterComparer : IEqualityComparer<List<Vector3Int>>
+{
+    public bool Equals(List<Vector3Int> x, List<Vector3Int> y)
+    {
+        if (x == null || y == null) return false;
+        if (x.Count != y.Count) return false;
+        return !x.Except(y).Any(); // Consider equal if all elements match
+    }
+
+    public int GetHashCode(List<Vector3Int> obj)
+    {
+        int hash = 17;
+        foreach (var v in obj.OrderBy(v => v.x * 73856093 ^ v.y * 19349663 ^ v.z * 83492791))
+        {
+            hash = hash * 31 + v.GetHashCode();
+        }
+        return hash;
     }
 }
 

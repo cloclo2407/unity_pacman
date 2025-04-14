@@ -85,7 +85,6 @@ namespace PacMan
                 CentralGameTracker.Initialize(_agentAgentManager, _obstacleMap);
 
                 isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
-                Debug.Log("Is blue: " + isBlue);
 
                 nrOfFriendlyAgents = _agentAgentManager.GetFriendlyAgents().Count;
 
@@ -502,7 +501,7 @@ namespace PacMan
         
         private void GoGetFood()
         { 
-            var (closestFood, closestFoodCluster) = CentralGameTracker.FindClosestFoodCluster(gameObject.transform.position, isBlue);
+            var (closestFood, closestFoodCluster) = CentralGameTracker.FindFurthestAvailableCluster(transform.position, isBlue);
             Vector2Int target = new Vector2Int(closestFood.x, closestFood.z);
             GenerateWaypointsCluster(target, closestFoodCluster);
         }
