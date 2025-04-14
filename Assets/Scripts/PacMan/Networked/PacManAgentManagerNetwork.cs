@@ -13,6 +13,8 @@ namespace PacMan
 {
     public class PacManAgentManagerNetwork : NetworkBehaviour, IPacManAgent, IPacManAgentManager
     {
+        private static float _planningTimestampAllAgents = -1;
+       
         public NetworkVariable<FixedString64Bytes> synctag = new NetworkVariable<FixedString64Bytes>();
         public NetworkVariable<Vector3> syncposition;
         public NetworkVariable<bool> isScared;
@@ -40,8 +42,9 @@ namespace PacMan
         private PacManObservations _latestKnownObservations;
         private bool initialized;
         private bool initializedAI;
-        private int expectedNrOfFriendlyAgents = -1; 
-        private int expectedNrOfEnemyAgents = -1; 
+        private int expectedNrOfFriendlyAgents = -1;
+        private int expectedNrOfEnemyAgents = -1;
+
 
         public void OnTransformParentChanged()
         {
@@ -127,7 +130,7 @@ namespace PacMan
             {
                 if (!initializedAI && AllValuesSynced())
                 {
-                    pacManAI.Initialize(_pacManGameManager.mapManager);
+                    pacManAI.Initialize(_pacManGameManager.mapManager, GetPlanningTimeStamp());
                     initializedAI = true;
                     return; //Return, because if we chose to plan, we need a new tick to get an updated state.
                 }
@@ -147,12 +150,19 @@ namespace PacMan
             }
         }
 
+        private float GetPlanningTimeStamp()
+        {
+            if (_planningTimestampAllAgents < 0) _planningTimestampAllAgents = Time.realtimeSinceStartup + _pacManGameManager.planningTime - (_pacManGameManager.matchLength - matchTime.Value);
+            return _planningTimestampAllAgents;
+        }
+
         private bool AllValuesSynced()
         {
             return !synctag.Value.IsEmpty &&
                    _latestKnownObservations.Observations != null &&
                    GetFriendlyAgents().Count == expectedNrOfFriendlyAgents;
         }
+
         private PacManObservations ProducePacManObservations(ulong clientId)
         {
             var pacManObservations = new PacManObservations();
@@ -200,7 +210,7 @@ namespace PacMan
         [ServerRpc]
         public void UpdateServerSideActionServerRpc(PacManAction action)
         {
-            m_action = action; // Store latest known action on server side
+            if (matchTime.Value > _pacManGameManager.planningTime) m_action = action; // Store latest known action on server side
         }
 
         public void FixedUpdate()

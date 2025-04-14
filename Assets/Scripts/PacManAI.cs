@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Threading;
 using PacMan.PacMan;
 using Scripts.Map;
 using UnityEngine;
@@ -11,11 +12,21 @@ namespace PacMan
         private ObstacleMap _obstacleMap;
         private MapManager _mapManager;
 
-        public void Initialize(MapManager mapManager) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
+        public void Initialize(MapManager mapManager, float finishPlanningTimestamp) // Ticked when all agents spawned by the network and seen properly by the client. The game is already running. Not the same as Start or Awake in this assignment.
         {
             _agentAgentManager = GetComponent<IPacManAgent>();
             _mapManager = mapManager;
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one);
+
+            Debug.Log(finishPlanningTimestamp);
+            Debug.Log(Time.realtimeSinceStartup);
+         
+            while (Time.realtimeSinceStartup < finishPlanningTimestamp) // NB!!!!!! You must use real time for this comparison! Time.time and Time.fixedTime do not progress unless you release the frame!
+            {   // This is not a very elegant solution, since we block the main thread completely.
+                Thread.Sleep(100); // Do planning
+                //Remember, finishPlanningTimestamp is for ALL agents, not just one. If you need to plan with multiple agents, you need to ensure ALL agents finish planning by this time.
+                //You might want to terminate a little bit earlier to avoid planning once the match has started - there are always some delays over the network and the sync wont be perfect.
+            }
         }
 
         public PacManAction Tick() //The Tick from the network controller

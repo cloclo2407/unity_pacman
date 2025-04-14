@@ -9,6 +9,8 @@ namespace PacMan
 {
     public class PacManGameManagerNetwork : PacManGameManager
     {
+        public float planningTime = 10f;
+
         public override void Start()
         {
         }
@@ -30,6 +32,11 @@ namespace PacMan
             {
                 NetworkManager.Singleton.NetworkTickSystem.Tick += NetworkTick;
                 started = true;
+                mapManager.GetObstacleObjects().ForEach(obj =>
+                {
+                    var component = obj.GetComponent<Collider>();
+                    if (component != null) component.isTrigger = true;
+                });
             }
         }
 
