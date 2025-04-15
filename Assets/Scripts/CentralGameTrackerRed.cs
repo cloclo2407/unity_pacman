@@ -15,8 +15,6 @@ public static class CentralGameTrackerRed
     private static IPacManAgent agentAgentManager;
     private static ObstacleMap obstacleMap;
 
-    public static List<Vector3> agentPositions;
-
     private static List<GameObject> foodPositions;
     private static HashSet<Vector3Int> previousFoodCells = new HashSet<Vector3Int>();
     private static HashSet<Vector3Int> currentFoodCells = new HashSet<Vector3Int>();
@@ -76,39 +74,44 @@ public static class CentralGameTrackerRed
     private static void updateFood()
     {
         foodClusters = new List<List<Vector3Int>>();
+        HashSet<Vector3Int> visited = new();
+        HashSet<Vector3Int> foodCellsSet = new(foodPositions.Select(f => obstacleMap.WorldToCell(f.transform.position)));
 
-        HashSet<Vector3Int> visited = new HashSet<Vector3Int>();
-
-        foreach (GameObject food in foodPositions)
+        foreach (var position in foodCellsSet)
         {
-            Vector3Int position = obstacleMap.WorldToCell(food.transform.position);
+            if (visited.Contains(position) || position.x >= 0) continue;
 
-            if (!visited.Contains(position) && position.x < 0)
+            List<Vector3Int> cluster = new();
+            Queue<Vector3Int> queue = new();
+            queue.Enqueue(position);
+            visited.Add(position);
+
+            while (queue.Count > 0)
             {
-                List<Vector3Int> cluster = new List<Vector3Int>();
-                Queue<Vector3Int> queue = new Queue<Vector3Int>();
-                queue.Enqueue(position);
-                visited.Add(position);
+                Vector3Int current = queue.Dequeue();
+                cluster.Add(current);
 
-                // BFS to find all adjacent food positions
-                while (queue.Count > 0)
+                foreach (Vector3Int neighbor in GetAdjacentCells(current))
                 {
-                    Vector3Int current = queue.Dequeue();
-                    cluster.Add(current);
-                    foreach (Vector3Int neighbor in GetAdjacentCells(current))
+                    if (!visited.Contains(neighbor) && foodCellsSet.Contains(neighbor))
                     {
-                        if (!visited.Contains(neighbor) && foodPositions.Any(f => obstacleMap.WorldToCell(f.transform.position) == neighbor))
-                        {
-                            queue.Enqueue(neighbor);
-                            visited.Add(neighbor);
-                        }
+                        queue.Enqueue(neighbor);
+                        visited.Add(neighbor);
                     }
                 }
-                foodClusters.Add(cluster);
             }
+
+            foodClusters.Add(cluster);
         }
-        // Sort clusters by their furthest x distance from x = 0
-        foodClusters.Sort((a, b) => CompareClusters(b, a)); // Reversed for x < 0
+
+        // Sort clusters by max absolute X only once
+        foodClusters.Sort((a, b) =>
+        {
+            int maxXA = int.MinValue, maxXB = int.MinValue;
+            foreach (var pos in a) maxXA = Mathf.Max(maxXA, Mathf.Abs(pos.x));
+            foreach (var pos in b) maxXB = Mathf.Max(maxXB, Mathf.Abs(pos.x));
+            return maxXB.CompareTo(maxXA);
+        });
     }
 
     /*
@@ -139,21 +142,31 @@ public static class CentralGameTrackerRed
 
     public static (Vector3Int, List<Vector3Int>) FindFurthestAvailableCluster(Vector3 startPos)
     {
+        Vector3Int startCell = obstacleMap.WorldToCell(startPos);
+
         foreach (var cluster in foodClusters)
         {
             if (claimedClusters.Contains(cluster)) continue;
-
-            // Mark this cluster as claimed so others don't pick it
             claimedClusters.Add(cluster);
 
-            // Choose the food in the cluster closest to current position (as entry point)
-            Vector3Int targetFood = cluster.OrderBy(pos => (pos - obstacleMap.WorldToCell(startPos)).sqrMagnitude).First();
-            return (targetFood, cluster);
+            Vector3Int closest = cluster[0];
+            float minDist = float.MaxValue;
+            foreach (var pos in cluster)
+            {
+                float dist = (pos - startCell).sqrMagnitude;
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    closest = pos;
+                }
+            }
+
+            return (closest, cluster);
         }
 
-        // No unclaimed cluster found
         return (Vector3Int.zero, null);
     }
+
 
     public static Vector3Int? CheckForFoodLoss(bool isBlue)
     {
@@ -179,71 +192,63 @@ public static class CentralGameTrackerRed
     public static void UpdateDefenseAssignments()
     {
         List<(GameObject intruder, Vector3 position)> visible = new();
-        List<Vector3> noisy = new();
 
-        // 1. Find visible intruders on your side
-        //foreach (var agent in defenders)
+        // Only get visible enemies from one agent (avoid repeated calls)
+        foreach (var enemy in defenders[0].GetVisibleEnemyAgents())
         {
-            foreach (var enemy in defenders[0].GetVisibleEnemyAgents())
+            if (IsOnMySide(enemy.gameObject.transform.position))
             {
-                if (IsOnMySide(enemy.gameObject.transform.position))
+                visible.Add((enemy.gameObject, enemy.gameObject.transform.position));
+            }
+        }
+
+        // Sort defenders by distance to intruders for greedy assignment
+        bool[] assigned = new bool[defenders.Count];
+        foreach (var (intruder, position) in visible)
+        {
+            float minDist = float.MaxValue;
+            int bestIdx = -1;
+
+            for (int i = 0; i < defenders.Count; i++)
+            {
+                if (assigned[i]) continue;
+
+                float dist = (defenders[i].gameObject.transform.position - position).sqrMagnitude;
+                if (dist < minDist)
                 {
-                    visible.Add((enemy.gameObject, enemy.gameObject.transform.position));
+                    minDist = dist;
+                    bestIdx = i;
                 }
             }
-        }
 
-        // 2. Assign one defender per visible intruder
-        int i = PacManAI.attackers;
-        foreach (var v in visible)
-        {
-            if (i >= defenders.Count) break;
-            var defender = defenders[i];
-            var pacIndex = defenders.IndexOf(defender);
-            agentDefenseStates[pacIndex] = new CentralGameTrackerBlue.DefenseAssignment
+            if (bestIdx != -1)
             {
-                State = CentralGameTrackerBlue.DefenseState.Chase,
-                TargetPosition = v.position,
-                TargetIntruder = v.intruder
-            };                
-            i++;
-        }
-
-        // 4. Lost food?
-        /*Vector3Int? lostFood = CheckForFoodLoss(isBlue);
-        if (lostFood != null)
-        {
-            Vector3 worldLost = obstacleMap.CellToWorld(lostFood.Value);
-            if (i < defenders.Count)
-            {
-                var pacIndex = defenders.IndexOf(defenders[i]);
-                agentDefenseStates[pacIndex] = new DefenseAssignment
+                assigned[bestIdx] = true;
+                agentDefenseStates[bestIdx] = new CentralGameTrackerBlue.DefenseAssignment
                 {
-                    State = DefenseState.Investigate,
-                    TargetPosition = worldLost
+                    State = CentralGameTrackerBlue.DefenseState.Chase,
+                    TargetPosition = position,
+                    TargetIntruder = intruder
                 };
-                i++;
             }
-        }*/
+        }
 
-        // 5. Remaining defenders patrol/idle
-        for (; i < defenders.Count; i++)
+        // Idle assignment for unassigned defenders
+        for (int i = 0; i < defenders.Count; i++)
         {
-            var pacIndex = defenders.IndexOf(defenders[i]);
-
-            // If already in the dictionary and in Patrol state, keep it
-            if (agentDefenseStates.TryGetValue(pacIndex, out var assignment) && assignment.State == CentralGameTrackerBlue.DefenseState.Patrol)
+            if (!assigned[i])
             {
-                continue;
-            }
-            else {
-                agentDefenseStates[pacIndex] = new CentralGameTrackerBlue.DefenseAssignment
-                {                  
+                if (agentDefenseStates.TryGetValue(i, out var current) && current.State == CentralGameTrackerBlue.DefenseState.Patrol)
+                    continue;
+
+                agentDefenseStates[i] = new CentralGameTrackerBlue.DefenseAssignment
+                {
                     State = CentralGameTrackerBlue.DefenseState.Idle
                 };
             }
         }
     }
+
 
     public static CentralGameTrackerBlue.DefenseAssignment GetDefenseAssignment(int pacManIndex)
     {
