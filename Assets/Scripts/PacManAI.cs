@@ -2,6 +2,7 @@
 using System.Threading;
 ﻿using System;
 using PacMan.PacMan;
+using System.Linq;
 using Scripts.Map;
 //using UnityEditor.TextCore.Text;
 using UnityEngine;
@@ -60,14 +61,19 @@ namespace PacMan
             _mapManager = mapManager;
             _obstacleMap = ObstacleMap.Initialize(_mapManager, new List<GameObject>(), Vector3.one, new Vector3(0.95f, 1f, 0.95f));
 
-            Debug.Log(finishPlanningTimestamp);
-            Debug.Log(Time.realtimeSinceStartup);
 
             while (Time.realtimeSinceStartup < finishPlanningTimestamp) // NB!!!!!! You must use real time for this comparison! Time.time and Time.fixedTime do not progress unless you release the frame!
             {   // This is not a very elegant solution, since we block the main thread completely.
                 if (!globallyInitialized)
                 {
                     globallyInitialized = true;
+                    var startPositions = mapManager.startPositions;
+                    allAgentPositions = new List<Vector3>(2 * nrOfFriendlyAgents);
+                    for (int i = 0; i < 2 * nrOfFriendlyAgents; i++)
+                    {
+                        allAgentPositions.Add(startPositions[i]);
+                    }
+
                     AllPairsShortestPaths.ComputeAllPairsShortestPaths(_obstacleMap);
                 }
                 
@@ -467,13 +473,58 @@ namespace PacMan
         }
 
         private void ReturnHome()
+        { 
+            var safetyDistances = new Dictionary<Vector2Int, float>();
+
+            Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
+            Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
+
+            foreach (var cell in _obstacleMap.traversabilityPerCell)
+            {
+                if ((isBlue && cell.Key.x == -1) || (!isBlue && cell.Key.x == 0))
+                {
+                    if (cell.Value != ObstacleMap.Traversability.Blocked)
+                    {
+                        var myDistance = AllPairsShortestPaths.distances[myCell][cell.Key];
+                        for (int i = nrOfFriendlyAgents; i < 2 * nrOfFriendlyAgents; i++)
+                        {
+
+                            var agentPos = allAgentPositions[i];
+                            if (agentPos != Vector3.zero)
+                            {
+                                var worldToCell = _obstacleMap.WorldToCell(agentPos);
+                                var agentCellPos = new Vector2Int(worldToCell.x, worldToCell.z);
+
+                                var dist = AllPairsShortestPaths.distances[agentCellPos][cell.Key];
+
+
+                                if (!safetyDistances.ContainsKey(cell.Key))
+                                {
+                                    safetyDistances[cell.Key] = dist - myDistance;
+
+                                }
+                                else
+                                {
+                                    safetyDistances[cell.Key] = Math.Max(dist - myDistance, safetyDistances[cell.Key]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Vector2Int safestHome = safetyDistances.OrderBy(cell => cell.Value).Last().Key;
+
+            GenerateWaypoints(safestHome);
+        }
+
+        private void ReturnHomeShortest()
         {
             Vector3Int myCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int myCell = new Vector2Int(myCell3D.x, myCell3D.z);
             Vector2Int closestHome = AllPairsShortestPaths.GetClosestHomeCell(myCell, isBlue);
             GenerateWaypoints(closestHome);
         }
-        
+
         private void GoGetFood()
         {
             Vector3Int closestFood;
