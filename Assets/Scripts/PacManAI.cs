@@ -111,38 +111,7 @@ namespace PacMan
             bool isScared = _agentAgentManager.IsScared();
             float scaredDuration = _agentAgentManager.GetScaredRemainingDuration();
 
-            //float carriedFoodCount = _agentAgentManager.GetCarriedFoodCount();
-
-            //List<GameObject> foodPositions = _agentAgentManager.GetFoodObjects();
-            //List<GameObject> capsulePositions = _agentAgentManager.GetCapsuleObjects();
-
-            //var friendlyAgentManager = _agentAgentManager.GetFriendlyAgents()[0];
-            //friendlyAgentManager.IsGhost();
-
             
-            /*foreach (var _friendlyAgentManager in _agentAgentManager.GetFriendlyAgents())
-            {
-                allAgentPositions[agentIndex] = _friendlyAgentManager.gameObject.transform.position;
-                agentIndex++;
-            }
-
-            var visibleEnemyAgents = _agentAgentManager.GetVisibleEnemyAgents();
-            PacManObservations fetchEnemyObservations = _agentAgentManager.GetEnemyObservations();
-            
-            if (fetchEnemyObservations.Observations.Length > 0)
-            {
-                foreach (var observation in fetchEnemyObservations.Observations)
-                {
-                    //Debug.Log($"agentindex {agentIndex}, the observed position is {observation.Position}, with sqrMagnitude {observation.Position.sqrMagnitude}");
-                    if (observation.Position.sqrMagnitude > 0.01f) //If the observed position is not Vector3.zero (no sound -> keep old posiiton)
-                    {
-                        //Debug.Log("Passed magnitude > 0.01f!");
-                        allAgentPositions[agentIndex] = observation.Position;
-                    }
-                     agentIndex++;
-                }
-            }
-            */
 
             // Replan if you got eaten and you respawn
             Vector3Int currentCell3D = _obstacleMap.WorldToCell(transform.position);
@@ -193,11 +162,12 @@ namespace PacMan
                         break;
 
                     case CentralGameTrackerBlue.DefenseState.Chase:
-                        if (assignment.TargetIntruder != null)
+                        /*if (assignment.TargetIntruder != null)
                         {
                             Vector3Int position3D = _obstacleMap.WorldToCell(assignment.TargetIntruder.transform.position);
                             GenerateWaypoints(new Vector2Int(position3D.x, position3D.z));
-                        }
+                        }*/
+                        ChaseIntruder(assignment);
                         break;
 
                     case CentralGameTrackerBlue.DefenseState.Investigate:
@@ -546,24 +516,59 @@ namespace PacMan
             }
         }
 
-        private void ChaseIntruder() // TO DO : Modify to go between the separation and the intruder
+        private void ChaseIntruder(CentralGameTrackerBlue.DefenseAssignment assignment)
         {
-            if (visibleIntruder == null)
+            if (assignment.TargetIntruder == null) return;
+
+            Vector3 currentPosition = transform.position;
+            Vector3 intruderPos = assignment.TargetIntruder.transform.position;
+            Vector3 intruderVelocity = assignment.TargetIntruder.GetComponent<Rigidbody>().linearVelocity;
+            Vector3 interceptTarget = intruderPos + intruderVelocity.normalized * 2.0f;
+
+            Vector3 direction = (interceptTarget - currentPosition).normalized;
+            float distance = Vector3.Distance(currentPosition, interceptTarget);
+
+            // If close enough, just go straight to the intruder
+            if (distance < 1.5f)
             {
-                currentDefenseState = CentralGameTrackerBlue.DefenseState.Return;
+                waypoints = new List<Vector3> { intruderPos };
+                currentWaypointIndex = 0;
                 return;
             }
 
-            Vector3Int cell = _obstacleMap.WorldToCell(visibleIntruder.transform.position);
+            // Raycast to check line of sight
+            bool hasLineOfSight = !Physics.Raycast(
+                currentPosition,
+                (intruderPos - currentPosition).normalized,
+                Vector3.Distance(currentPosition, intruderPos),
+                LayerMask.GetMask("Default")
+            );
 
-            GenerateWaypoints(new Vector2Int(cell.x, cell.z));
-        }
+            // If intruder is visible and no obstacle between agent and intercept point
+            if (hasLineOfSight && !Physics.Raycast(currentPosition, direction, distance, LayerMask.GetMask("Default")))
+            {
+                waypoints = new List<Vector3> { interceptTarget };
+                currentWaypointIndex = 0;
+            }
+            else
+            {
+                // Predict future cell
+                Vector3Int futureCell = _obstacleMap.WorldToCell(interceptTarget);
+                Vector2Int futureGridCell = new Vector2Int(futureCell.x, futureCell.z);
 
-        private void InvestigateSuspiciousArea()
-        {
-            Vector3 target = noisyIntruderGuess ?? lastStolenFoodPos ?? transform.position;
-            Vector3Int cell = _obstacleMap.WorldToCell(target);
-            GenerateWaypoints(new Vector2Int(cell.x, cell.z));
+                // If future cell is free, path to it
+                if (_obstacleMap.traversabilityPerCell[futureGridCell] == ObstacleMap.Traversability.Free)
+                {
+                    GenerateWaypoints(futureGridCell);
+                }
+                else
+                {
+                    // Fallback to intruder's current position
+                    Vector3Int currentCell = _obstacleMap.WorldToCell(intruderPos);
+                    Vector2Int currentGridCell = new Vector2Int(currentCell.x, currentCell.z);
+                    GenerateWaypoints(currentGridCell);
+                }
+            }
         }
 
     }
