@@ -116,7 +116,7 @@ namespace PacMan
             // Replan if you got eaten and you respawn
             Vector3Int currentCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int currentCell = new Vector2Int(currentCell3D.x, currentCell3D.z);
-            if (Vector2Int.Distance(currentCell,startCell) < 2 && Vector2Int.Distance(currentCell, oldCell) > 1)
+            if (/*Vector2Int.Distance(currentCell,startCell) < 2 && */Vector2Int.Distance(currentCell, oldCell) > 2)
             {
                 respawned = true;
                 GenerateWaypoints(path[^1]);
