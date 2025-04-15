@@ -81,7 +81,11 @@ namespace PacMan
         {
             if (!initialized)
             {
-                initialized = true;               
+                initialized = true;
+
+                Vector3Int startCell3D = _obstacleMap.WorldToCell(transform.position);
+                startCell = new Vector2Int(startCell3D.x, startCell3D.z);
+                oldCell = startCell;
 
                 isBlue = (TeamAssignmentUtil.CheckTeam(gameObject) == Team.Blue);
                 if (isBlue) CentralGameTrackerBlue.Initialize(_agentAgentManager, _obstacleMap);
@@ -96,27 +100,17 @@ namespace PacMan
                     allAgentPositions.Add(startPositions[i]);
                 }
 
-                Vector3Int startCell3D = _obstacleMap.WorldToCell(transform.position);
-                startCell = new Vector2Int(startCell3D.x, startCell3D.z);
-                oldCell = startCell;
             }
             if (!defenseAssigned)
             {
                 AssignDefense();
                 defenseAssigned = true;
             }
-            //_agentAgentManager.GetTimeRemaining();
-            //_agentAgentManager.GetScore();
-            bool isGhost = _agentAgentManager.IsGhost();
-            bool isScared = _agentAgentManager.IsScared();
-            float scaredDuration = _agentAgentManager.GetScaredRemainingDuration();
-
-            
-
+ 
             // Replan if you got eaten and you respawn
             Vector3Int currentCell3D = _obstacleMap.WorldToCell(transform.position);
             Vector2Int currentCell = new Vector2Int(currentCell3D.x, currentCell3D.z);
-            if (currentCell == startCell && Vector2Int.Distance(currentCell, oldCell) > 1)
+            if (Vector2Int.Distance(currentCell,startCell) < 2 && Vector2Int.Distance(currentCell, oldCell) > 1)
             {
                 respawned = true;
                 GenerateWaypoints(path[^1]);
