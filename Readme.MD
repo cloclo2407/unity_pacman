@@ -1,96 +1,62 @@
-﻿# PacMan Capture-The-Flag assignment
+# Unity Pacman Capture the Flag 
 
-Inspired by UC Berkeley's Python environment: http://ai.berkeley.edu/contest.html
+---
 
-The PacMan environment is built using network Unity NetCode for GameObjects. 
-If you wish to ignore most of that, you can build your AI code into the [PacManAI](Assets/Scripts/PacManAI.cs) class, as in the previous assignments.
-However, part of this assignment is competing against other teams.
-For managing that, we have provided a networked version of the game as well.
+## Project Overview
 
-We strongly suggest you test out your solutions in both **Host** and **Client/Server** mode **_AS EARLY AS POSSIBLE_**.
-Otherwise you might run into unexpected issues during competitions.
+This project implements an AI for a **Pacman Capture the Flag** game, set in a symmetric maze environment where two teams compete. Each team controls multiple agents (“ghosts”) trying to collect enemy pills from the opponent's side and bring them back safely to their own side. The team with the most pills on their side at the end wins.
 
-It is possible to run the environment in one three ways:
-- Normal Unity scene without networking (PacManNormal)
-- Networked Host (PacManNetworked)
-- Networked Client / Server (PacManNetworked)
+- When agents cross into the opponent’s half, they transform into Pacman and can eat pills.
+- Eating a super-pill on the enemy side enables temporarily eating ghosts.
+- Agents drop carried pills if killed, and re-spawn on their own side.
+- Enemy sensing is done via line-of-sight and noisy audio cues, adding strategic uncertainty.
 
-## Host
+---
 
-In the host mode, both the clients and the server are run inside one instance of the environment.
-This can be started by running the environment with "Play" and clicking on the "Host" button in the editor.
+## ⚙️ Implementation Details
 
-Or alternatively with the following command (assuming an executable named "PacManCTF"):
-```
-./PacManCTF -mode host
-```
+### Roles & Strategy
 
-The host mode can be a convenient mode for testing changes quickly. 
+We divided the agents into two roles:
 
-You can change the code in the GameManager to launch into host mode directly. **Dont forget to change it back when its competition time!**
+- **Attackers:** Focused on collecting food clusters on the enemy side and returning safely with the pills.
+- **Defenders:** Responsible for guarding the home side through patrolling, chasing intruders, and returning to patrol.
 
-## Client / Server
+### Map Preprocessing
 
-In this mode, 3 instances of the application are necessary to run the game. Therefore, a built artifact is required to launch it in this manner.
+- We precomputed **all-pairs shortest paths** on the maze using the Floyd–Warshall algorithm.
+- Distance and predecessor matrices are stored for quick path reconstruction during gameplay.
 
-Once you have the executable, you can either:
-- Run it 3 times and use the GUI to start 1 server and 2 clients. The server should be started first.
-- Alternatively using this command (assuming an executable named "PacManCTF"):
-```
- ./PacManCTF -mode server & ./PacManCTF -mode client & ./PacManCTF -mode client
-```
-Delays in the Client/Server mode are larger than in host mode. It is suggested you test your algorithms out in both modes.
-Note that the **final competitions will be in Client/Server mode**, to enable you to share executables and run games against other teams without seeing their code.
+### Central Game Tracker
 
-NB! Note that if the "-mode" parameter is not set, you have to manually specify it from the GUI after startup.
-## Other command line options
+- Coordinates agent roles and assigns attackers and defenders based on team size and game state.
+- Identifies clusters of food pills and assigns them to attackers, prioritizing those farther from the border.
+- Manages defenders’ state transitions (Patrol, Chase, Return) dynamically.
 
-It is possible to manually change the port of an executable 
+### Attacker Behavior
 
-```
- ./PacManCTF -port <number> -mode host
-```
+- One or two attackers assigned per team, depending on the number of agents.
+- Attackers follow precomputed paths to assigned clusters to collect pills.
+- Return paths consider enemy positions to choose the safest border crossing.
+- Attackers move at maximum speed, emphasizing fast pill collection over stealth.
 
-Or the map to be loaded during startup
+### Defender Behavior
 
-```
- ./PacManCTF -map <name> 
-```
-Valid map names can be found in the map manager, as in previous assignments. A valid example would be
-```
- ./PacManCTF -map pacmanA
-``` 
+- Defenders patrol assigned positions near the border, moving in a pattern parallel to the dividing line.
+- On enemy detection, the nearest defender chases by predicting enemy movement, using direct movement if possible.
+- After chasing or respawn, defenders return to their patrol positions.
 
-# Building an executable
+---
 
-![alt text](build1.png)
+## 📘 Course Information
 
-It is best to build a single scene into the executable at once, unless you know what you are doing and how to select scenes.
+This project was developed for **Assignment 3** of the course  
+**DD2438 – Autonomous Agents and Multi-Agent Systems** at **KTH Royal Institute of Technology**.
 
-![alt text](BuildNew1.png)
+The Unity environment, including pacman models and map assets, was provided as part of the assignment.  
+Our work focused on implementing custom path planning and strategies.
 
-You can change the Target Platform in order to build versions that can be used by people on other plaforms.
-In order for that to be available you have to add the corresponding modules to the version of the engine you are using (see below).
+## 👤 Authors
 
-![alt text](BuildNew2.png)
-
-NB! When building for different platforms, do not open or launch any of the files!
-Some filesystems will cause the files to become corrupted and not launchable on the target platform.
-
-If for some reason some of the platforms are grayed out, you can add support for those as follows:
-
-![alt text](BuildNew3.png)
-![alt text](BuildNew4.png)
-
-Do not forget to restart your editor after installing new support modules.
-
-NB! On some platforms you might need to delete your old build artifacts if you wish to build an artifact into the same folder as a previous one to see any changes.
-
-Once the executable is built, you can run it directly  as any other application and use the UI as in the editor or using the commands in the sections above.
-## Debugging executables
-
-I suggest reading the Unity [netcode for gameobjects](https://docs-multiplayer.unity3d.com/netcode/current/about) manual in general, if you wish to understand more about how this environment is built.
-
-At the very least, I suggest looking at the information about [debugging.](https://docs-multiplayer.unity3d.com/netcode/current/tutorials/testing/techniques_and_tricks_for_debugging_multiplayer_games)
-
-If you are working on Windows, I suggest you check out this [subsection about logfiles](https://docs-multiplayer.unity3d.com/netcode/current/tutorials/command-line-helper#test-on-windows) and if you are on Mac, [subsection about launching in general](https://docs-multiplayer.unity3d.com/netcode/current/tutorials/command-line-helper#test-on-macos).
+- Chloé Leyssens  
+- Emil Wiktorsson
